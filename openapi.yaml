@@ -1,0 +1,176 @@
+openapi: 3.0.3
+info:
+  title: jsPsych Host Site API
+  version: 0.1.0
+
+servers:
+  - url: https://api.yoursite.com
+    description: Production server
+
+paths:
+  /auth/signin:
+    post:
+      summary: Sign in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:   { type: string }
+                password:{ type: string }
+              required: [email, password]
+      responses:
+        '200':
+          description: JWT & user info
+
+  /profile:
+    get:
+      summary: Get current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+    patch:
+      summary: Update profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserProfileUpdate'
+      responses:
+        '200':
+          description: Profile updated
+
+  /experiments:
+    get:
+      summary: List your experiments
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Experiment'
+    post:
+      summary: Create a new experiment
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewExperiment'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Experiment'
+
+  /experiments/{expId}/jspsych:
+    post:
+      summary: Upload jsPsych bundle
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: expId
+          schema: { type: string }
+          required: true
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Bundle stored
+
+  /experiments/{expId}/participants:
+    get:
+      summary: List participants
+      security: [ bearerAuth: [] ]
+      parameters:
+        - in: path
+          name: expId
+          schema: { type: string }
+          required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Participant'
+    post:
+      summary: Add a participant
+      security: [ bearerAuth: [] ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddParticipant'
+      responses:
+        '200':
+          description: Added
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    UserProfile:
+      type: object
+      properties:
+        id:       { type: string }
+        email:    { type: string }
+        name:     { type: string }
+        organizationId: { type: string, nullable: true }
+        priority: { type: boolean }
+    UserProfileUpdate:
+      type: object
+      properties:
+        name:     { type: string }
+        organizationId: { type: string }
+    NewExperiment:
+      type: object
+      properties:
+        title:     { type: string }
+        description:{ type: string }
+    Experiment:
+      allOf:
+        - $ref: '#/components/schemas/NewExperiment'
+        - type: object
+          properties:
+            id:       { type: string }
+            status:   { type: string, enum: [draft, live, ended] }
+            createdAt:{ type: string, format: date-time }
+    Participant:
+      type: object
+      properties:
+        id:           { type: string }
+        prolificPid:  { type: string }
+    AddParticipant:
+      type: object
+      properties:
+        prolificPid:  { type: string }
+      required: [prolificPid]
