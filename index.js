@@ -1,11 +1,22 @@
 // index.js
-const express = require('express')
-const cors    = require('cors')
-const app     = express()
-const db = require('./config/db')
+require('dotenv').config(); 
+const express = require('express');
+const cors    = require('cors');
+const db = require('./config/db');
+const app     = express();
 
 app.use(cors())
 app.use(express.json())
+
+// Ping
+app.get('/ping', async (_, res) => {
+  try {
+    const { rows } = await db.query('SELECT NOW() AS now');
+    res.json({ ok: true, now: rows[0].now });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
 
 // Auth
 app.post('/auth/signin', require('./routes/auth').signin)
@@ -15,8 +26,8 @@ app.get ('/profile', require('./routes/profile').get)
 app.patch('/profile', require('./routes/profile').update)
 
 // Experiments
-app.get ('/experiments', require('./routes/experiments').list)
-app.post('/experiments', require('./routes/experiments').create)
+const experimentsRouter = require('./routes/experiments')
+app.use('/experiments', experimentsRouter)
 
 // ...etc.
 
