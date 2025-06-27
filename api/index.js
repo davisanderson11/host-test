@@ -19,11 +19,12 @@ app.get('/ping', async (_, res) => {
 });
 
 // Auth
-app.post('/auth/signin', require('./routes/auth').signin)
+const authRouter = require('./routes/auth')
+app.use('/auth', authRouter);
 
 // Profile
-app.get ('/profile', require('./routes/profile').get)
-app.patch('/profile', require('./routes/profile').update)
+const profileRouter = require('./routes/profile')
+app.use('/profile', profileRouter)
 
 // Experiments
 const experimentsRouter = require('./routes/experiments')
