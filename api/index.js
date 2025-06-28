@@ -36,31 +36,3 @@ sequelizeInstance.sync({ alter: true })
     app.listen(PORT, () => console.log(`API listening on ${PORT}`));
   })
   .catch(err => console.error('DB sync error:', err));
-
-// experiments.js (excerpt)
-const express = require('express');
-const router = express.Router();
-const { body, validationResult } = require('express-validator');
-const Experiment = require('../models/experiment');
-
-router.post('/',
-  body('title').isString().notEmpty(),
-  body('description').optional().isString(),
-  async (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-
-    try {
-      const exp = await Experiment.create({
-        title: req.body.title,
-        description: req.body.description || null,
-        user_id: req.user.id
-      });
-      res.status(201).json(exp);
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-module.exports = router;
