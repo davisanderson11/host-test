@@ -1,18 +1,103 @@
 // routes/experiments.js
 const express = require('express');
-const db = require('../config/db');
+const { body, validationResult } = require('express-validator');
+const jwt = require('jsonwebtoken');
+const Experiment = require('../models/experiment');
+
 const router = express.Router();
 
-// create experiment
-router.post('/', async (req, res, next) => {
-  const { title, description } = req.body;
-  const ownerId = req.user.id;
-  const result = await db.query(
-    `insert into experiments(owner_id, title, description)
-     values($1,$2,$3) returning *`,
-    [ownerId, title, description]
-  );
-  res.status(201).json(result.rows[0]);
+// Auth middleware (same as in profile.js)
+const auth = (req, res, next) => {
+  const header = req.headers.authorization;
+  if (!header) return res.status(401).json({ error: 'No token provided' });
+  const token = header.split(' ')[1];
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = payload;
+    next();
+  } catch {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+};
+
+// POST /experiments
+router.post(
+  '/',
+  auth,
+  body('title').isString().notEmpty(),
+  body('description').optional().isString(),
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    try {
+      const exp = await Experiment.create({
+        userId: req.user.id,
+        title: req.body.title,
+        description: req.body.description || null
+      });
+      res.status(201).json(exp);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// GET /experiments
+router.get('/', auth, async (req, res) => {
+  try {
+    const exps = await Experiment.findAll({ where: { userId: req.user.id } });
+    res.json(exps);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /experiments/:id
+router.get('/:id', auth, async (req, res) => {
+  try {
+    const exp = await Experiment.findOne({
+      where: { id: req.params.id, userId: req.user.id }
+    });
+    if (!exp) return res.status(404).json({ error: 'Experiment not found' });
+    res.json(exp);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /experiments/:id
+router.put(
+  '/:id',
+  auth,
+  body('title').optional().isString(),
+  body('description').optional().isString(),
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    try {
+      const exp = await Experiment.findOne({
+        where: { id: req.params.id, userId: req.user.id }
+      });
+      if (!exp) return res.status(404).json({ error: 'Experiment not found' });
+      await exp.update(req.body);
+      res.json(exp);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// DELETE /experiments/:id
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    const deleted = await Experiment.destroy({
+      where: { id: req.params.id, userId: req.user.id }
+    });
+    if (!deleted) return res.status(404).json({ error: 'Experiment not found' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;
