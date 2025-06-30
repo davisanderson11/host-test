@@ -1,24 +1,10 @@
 // routes/experiments.js
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const jwt = require('jsonwebtoken');
+const auth = require('../middleware/auth');
 const Experiment = require('../models/experiment');
 
 const router = express.Router();
-
-// Auth middleware (same as in profile.js)
-const auth = (req, res, next) => {
-  const header = req.headers.authorization;
-  if (!header) return res.status(401).json({ error: 'No token provided' });
-  const token = header.split(' ')[1];
-  try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = payload;
-    next();
-  } catch {
-    res.status(401).json({ error: 'Invalid token' });
-  }
-};
 
 // POST /experiments
 router.post(
@@ -31,7 +17,7 @@ router.post(
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
     try {
       const exp = await Experiment.create({
-        userId: req.user.id,
+        user_id: req.user.id,
         title: req.body.title,
         description: req.body.description || null
       });
@@ -45,7 +31,7 @@ router.post(
 // GET /experiments
 router.get('/', auth, async (req, res) => {
   try {
-    const exps = await Experiment.findAll({ where: { userId: req.user.id } });
+    const exps = await Experiment.findAll({ where: { user_id: req.user.id } });
     res.json(exps);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -56,7 +42,7 @@ router.get('/', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const exp = await Experiment.findOne({
-      where: { id: req.params.id, userId: req.user.id }
+      where: { id: req.params.id, user_id: req.user.id }
     });
     if (!exp) return res.status(404).json({ error: 'Experiment not found' });
     res.json(exp);
@@ -76,7 +62,7 @@ router.put(
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
     try {
       const exp = await Experiment.findOne({
-        where: { id: req.params.id, userId: req.user.id }
+        where: { id: req.params.id, user_id: req.user.id }
       });
       if (!exp) return res.status(404).json({ error: 'Experiment not found' });
       await exp.update(req.body);
@@ -91,7 +77,7 @@ router.put(
 router.delete('/:id', auth, async (req, res) => {
   try {
     const deleted = await Experiment.destroy({
-      where: { id: req.params.id, userId: req.user.id }
+      where: { id: req.params.id, user_id: req.user.id }
     });
     if (!deleted) return res.status(404).json({ error: 'Experiment not found' });
     res.json({ success: true });

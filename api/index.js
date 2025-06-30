@@ -3,9 +3,11 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const db = require('./config/db');
+const path = require('path');
 const authRouter = require('./routes/auth');
 const profileRouter = require('./routes/profile');
 const experimentsRouter = require('./routes/experiments');
+const uploadRouter = require('./routes/upload');
 
 const app = express();
 app.use(cors());
@@ -27,6 +29,15 @@ app.use('/auth', authRouter);
 app.use('/profile', profileRouter);
 // Experiments
 app.use('/experiments', experimentsRouter);
+// File uploads
+app.use('/experiments', uploadRouter);
+
+// Serve uploaded files (for public experiment access)
+app.use('/run/:id/assets', (req, res, next) => {
+  const experimentId = req.params.id;
+  const uploadPath = path.join(__dirname, process.env.UPLOAD_DIR || './uploads', 'experiments', experimentId);
+  express.static(uploadPath)(req, res, next);
+});
 
 // Sync DB then start server
 const sequelizeInstance = db.sequelize;
