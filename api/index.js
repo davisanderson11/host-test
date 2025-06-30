@@ -9,6 +9,8 @@ const profileRouter = require('./routes/profile');
 const experimentsRouter = require('./routes/experiments');
 const uploadRouter = require('./routes/upload');
 const publicRouter = require('./routes/public');
+const dataRouter = require('./routes/data');
+const datapipeRouter = require('./routes/datapipe');
 
 const app = express();
 app.use(cors());
@@ -32,6 +34,11 @@ app.use('/profile', profileRouter);
 app.use('/experiments', experimentsRouter);
 // File uploads
 app.use('/experiments', uploadRouter);
+// Data management
+app.use('/experiments', dataRouter);
+// DataPipe integration
+app.use('/datapipe', datapipeRouter);
+app.use('/experiments', datapipeRouter);
 
 // Public routes (no auth required)
 app.use('/', publicRouter);
