@@ -12,6 +12,9 @@ const publicRouter = require('./routes/public');
 const dataRouter = require('./routes/data');
 const datapipeRouter = require('./routes/datapipe');
 const dashboardRouter = require('./routes/dashboard');
+const dataDeletionRouter = require('./routes/dataDeletion');
+const prolificRouter = require('./routes/prolific');
+const adminRouter = require('./routes/admin');
 
 const app = express();
 app.use(cors());
@@ -35,13 +38,20 @@ app.use('/profile', profileRouter);
 app.use('/experiments', experimentsRouter);
 // File uploads
 app.use('/experiments', uploadRouter);
+// Data deletion - must come before data routes to avoid conflicts
+app.use('/experiments', dataDeletionRouter);
+app.use('/data', dataDeletionRouter);
 // Data management
 app.use('/experiments', dataRouter);
 // DataPipe integration
 app.use('/datapipe', datapipeRouter);
 app.use('/experiments', datapipeRouter);
+// Prolific integration
+app.use('/experiments', prolificRouter);
 // Dashboard
 app.use('/dashboard', dashboardRouter);
+// Admin routes
+app.use('/admin', adminRouter);
 
 // Public routes (no auth required)
 app.use('/', publicRouter);

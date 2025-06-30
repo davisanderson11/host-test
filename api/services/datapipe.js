@@ -24,12 +24,16 @@ class DataPipeService {
    */
   async sendData(datapipeExperimentId, sessionId, data) {
     try {
+      // Create unique filename with timestamp to prevent duplicates
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `${sessionId}_${timestamp}.json`;
+      
       // DataPipe expects data as a text string with experimentID and filename
       const response = await axios.post(
         `${this.baseURL}/data`,
         {
           experimentID: datapipeExperimentId,
-          filename: `${sessionId}.json`,
+          filename: filename,
           data: JSON.stringify(data) // Convert to string as required by API
         },
         {
