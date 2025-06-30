@@ -189,8 +189,8 @@ router.get('/activity', auth, async (req, res) => {
     // Get daily participant counts
     const participantData = await ExperimentData.findAll({
       attributes: [
-        [ExperimentData.sequelize.fn('DATE', ExperimentData.sequelize.col('experiment_data.created_at')), 'date'],
-        [ExperimentData.sequelize.fn('COUNT', ExperimentData.sequelize.col('experiment_data.id')), 'count']
+        [ExperimentData.sequelize.fn('DATE', ExperimentData.sequelize.col('ExperimentData.created_at')), 'date'],
+        [ExperimentData.sequelize.fn('COUNT', ExperimentData.sequelize.col('ExperimentData.id')), 'count']
       ],
       where: {
         created_at: { [Op.gte]: startDate }
@@ -200,7 +200,7 @@ router.get('/activity', auth, async (req, res) => {
         where: { user_id: req.user.id },
         attributes: []
       }],
-      group: [ExperimentData.sequelize.fn('DATE', ExperimentData.sequelize.col('experiment_data.created_at'))],
+      group: [ExperimentData.sequelize.fn('DATE', ExperimentData.sequelize.col('ExperimentData.created_at'))],
       raw: true
     });
 
