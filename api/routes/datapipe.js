@@ -52,9 +52,10 @@ router.post('/:id/datapipe/config',
         try {
           const datapipeResponse = await datapipeService.createExperiment({}, experiment);
           
-          // Store the DataPipe experiment ID
+          // Store the DataPipe experiment ID (handle different response formats)
+          const datapipeId = datapipeResponse.experimentId || datapipeResponse.experiment_id || datapipeResponse.id;
           await experiment.update({
-            datapipe_experiment_id: datapipeResponse.experimentId
+            datapipe_experiment_id: datapipeId
           });
 
           res.json({
@@ -62,7 +63,7 @@ router.post('/:id/datapipe/config',
             experiment_id: experiment.id,
             osf_project_id: experiment.datapipe_project_id,
             osf_data_component_id: experiment.datapipe_component_id,
-            datapipe_experiment_id: experiment.datapipe_experiment_id,
+            datapipe_experiment_id: datapipeId,
             osf_project_url: `https://osf.io/${experiment.datapipe_project_id}/`
           });
         } catch (error) {

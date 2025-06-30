@@ -3,7 +3,8 @@ const axios = require('axios');
 
 class DataPipeService {
   constructor() {
-    this.baseURL = process.env.DATAPIPE_API_URL || 'https://pipe.jspsych.org/api';
+    // DataPipe API v2 endpoint
+    this.baseURL = process.env.DATAPIPE_API_URL || 'https://pipe.jspsych.org/api/v2';
   }
 
   /**
@@ -25,6 +26,7 @@ class DataPipeService {
           }
         }
       );
+      console.log('DataPipe create experiment response:', response.data);
       return response.data;
     } catch (error) {
       console.error('DataPipe create experiment error:', error.response?.data || error.message);
