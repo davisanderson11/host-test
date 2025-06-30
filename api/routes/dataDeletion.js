@@ -3,6 +3,8 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { Op } = require('sequelize');
+const path = require('path');
+const fs = require('fs').promises;
 const Experiment = require('../models/experiment');
 const ExperimentData = require('../models/experimentData');
 
@@ -31,14 +33,34 @@ router.delete('/:id/data/all', auth, async (req, res) => {
       return res.status(404).json({ error: 'Experiment not found' });
     }
 
-    // Delete all data for this experiment
+    const deleteFiles = req.query.deleteFiles === 'true';
+    let filesDeleted = 0;
+
+    // Delete files if requested
+    if (deleteFiles) {
+      const dataDir = path.join(__dirname, '..', process.env.UPLOAD_DIR || './uploads', 'experiments', experiment.id, 'data');
+      try {
+        const files = await fs.readdir(dataDir);
+        for (const file of files) {
+          if (file.endsWith('.json')) {
+            await fs.unlink(path.join(dataDir, file));
+            filesDeleted++;
+          }
+        }
+      } catch (error) {
+        console.error('Error deleting files:', error);
+      }
+    }
+
+    // Delete all data from database
     const deletedCount = await ExperimentData.destroy({
       where: { experiment_id: experiment.id }
     });
 
     res.json({ 
       message: `All data deleted for experiment ${experiment.title}`,
-      deleted_count: deletedCount
+      deleted_count: deletedCount,
+      files_deleted: deleteFiles ? filesDeleted : 0
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -92,8 +114,8 @@ router.post('/auto-delete', auth, async (req, res) => {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - experiment.auto_delete_days);
 
-      // Delete old synced data
-      const deletedCount = await ExperimentData.destroy({
+      // Get data to delete
+      const dataToDelete = await ExperimentData.findAll({
         where: {
           experiment_id: experiment.id,
           synced_to_osf: true,
@@ -101,12 +123,55 @@ router.post('/auto-delete', auth, async (req, res) => {
         }
       });
 
-      if (deletedCount > 0) {
+      if (dataToDelete.length > 0) {
+        // Delete files first
+        const dataDir = path.join(__dirname, '..', process.env.UPLOAD_DIR || './uploads', 'experiments', experiment.id, 'data');
+        let filesDeleted = 0;
+        
+        try {
+          const files = await fs.readdir(dataDir);
+          for (const data of dataToDelete) {
+            // Look for files matching the session ID
+            const matchingFiles = files.filter(f => f.startsWith(data.session_id));
+            for (const file of matchingFiles) {
+              try {
+                await fs.unlink(path.join(dataDir, file));
+                filesDeleted++;
+              } catch (e) {
+                console.error(`Failed to delete file ${file}:`, e);
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error accessing data directory for experiment ${experiment.id}:`, error);
+        }
+
+        // Delete from database
+        const deletedCount = await ExperimentData.destroy({
+          where: {
+            experiment_id: experiment.id,
+            synced_to_osf: true,
+            synced_at: { [Op.lt]: cutoffDate }
+          }
+        });
+
+        // Check if all data has been deleted
+        const remainingData = await ExperimentData.count({
+          where: { experiment_id: experiment.id }
+        });
+
+        // If no data remains, set experiment to not live
+        if (remainingData === 0) {
+          await experiment.update({ live: false });
+        }
+
         results.push({
           experiment_id: experiment.id,
           experiment_title: experiment.title,
           deleted_count: deletedCount,
-          auto_delete_days: experiment.auto_delete_days
+          files_deleted: filesDeleted,
+          auto_delete_days: experiment.auto_delete_days,
+          experiment_set_offline: remainingData === 0
         });
         totalDeleted += deletedCount;
       }
