@@ -11,6 +11,7 @@ const uploadRouter = require('./routes/upload');
 const publicRouter = require('./routes/public');
 const dataRouter = require('./routes/data');
 const datapipeRouter = require('./routes/datapipe');
+const dashboardRouter = require('./routes/dashboard');
 
 const app = express();
 app.use(cors());
@@ -39,6 +40,8 @@ app.use('/experiments', dataRouter);
 // DataPipe integration
 app.use('/datapipe', datapipeRouter);
 app.use('/experiments', datapipeRouter);
+// Dashboard
+app.use('/dashboard', dashboardRouter);
 
 // Public routes (no auth required)
 app.use('/', publicRouter);

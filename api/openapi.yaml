@@ -815,6 +815,162 @@ paths:
               schema:
                 type: string
 
+  /dashboard/overview:
+    get:
+      tags: [Dashboard]
+      summary: Get dashboard overview statistics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Dashboard overview data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statistics:
+                    type: object
+                    properties:
+                      experiments:
+                        type: object
+                        properties:
+                          total: { type: number }
+                          live: { type: number }
+                          with_data: { type: number }
+                      participants:
+                        type: object
+                        properties:
+                          total: { type: number }
+                          this_week: { type: number }
+                      data_sync:
+                        type: object
+                        properties:
+                          synced: { type: number }
+                          pending: { type: number }
+                  recent_activity:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        title: { type: string }
+                        live: { type: boolean }
+                        created_at: { type: string, format: date-time }
+                        participant_count: { type: number }
+
+  /dashboard/experiments:
+    get:
+      tags: [Dashboard]
+      summary: Get detailed experiment statistics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Detailed experiment statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: number }
+                  experiments:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        title: { type: string }
+                        live: { type: boolean }
+                        created_at: { type: string, format: date-time }
+                        statistics:
+                          type: object
+                          properties:
+                            total_participants: { type: number }
+                            synced_participants: { type: number }
+                            pending_sync: { type: number }
+                            last_participant: { type: string, format: date-time, nullable: true }
+                        configuration:
+                          type: object
+                          properties:
+                            has_files: { type: boolean }
+                            has_prolific: { type: boolean }
+                            has_datapipe: { type: boolean }
+
+  /dashboard/activity:
+    get:
+      tags: [Dashboard]
+      summary: Get activity timeline
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: days
+          schema:
+            type: integer
+            default: 30
+          description: Number of days to look back
+      responses:
+        '200':
+          description: Activity timeline data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  time_range:
+                    type: object
+                    properties:
+                      start: { type: string, format: date-time }
+                      end: { type: string, format: date-time }
+                      days: { type: number }
+                  daily_participants:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string, format: date }
+                        count: { type: number }
+                  daily_experiments:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string, format: date }
+                        count: { type: number }
+
+  /dashboard/storage:
+    get:
+      tags: [Dashboard]
+      summary: Get storage usage statistics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Storage usage statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_storage:
+                    type: object
+                    properties:
+                      bytes: { type: number }
+                      mb: { type: string }
+                      gb: { type: string }
+                  total_files: { type: number }
+                  experiments:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        experiment_id: { type: string, format: uuid }
+                        experiment_title: { type: string }
+                        size_bytes: { type: number }
+                        size_mb: { type: string }
+                        file_count: { type: number }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -946,3 +1102,5 @@ tags:
     description: Public endpoints for experiment participants
   - name: Health
     description: Health check endpoints
+  - name: Dashboard
+    description: Dashboard and analytics endpoints
