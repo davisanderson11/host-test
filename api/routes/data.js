@@ -157,6 +157,62 @@ router.get('/:id/data/export/csv', auth, async (req, res) => {
   }
 });
 
+// GET /experiments/:id/data/summary - Get summary statistics
+router.get('/:id/data/summary', auth, async (req, res) => {
+  try {
+    // Verify experiment ownership
+    const experiment = await Experiment.findOne({
+      where: { id: req.params.id, user_id: req.user.id }
+    });
+    
+    if (!experiment) {
+      return res.status(404).json({ error: 'Experiment not found' });
+    }
+
+    // Get all data
+    const data = await ExperimentData.findAll({
+      where: { experiment_id: experiment.id }
+    });
+
+    // Calculate summary statistics
+    const summary = {
+      experiment_id: experiment.id,
+      experiment_title: experiment.title,
+      total_participants: data.length,
+      participants_with_prolific_id: data.filter(d => d.prolific_pid).length,
+      first_participant: data.length > 0 ? data[data.length - 1].created_at : null,
+      last_participant: data.length > 0 ? data[0].created_at : null,
+      synced_to_osf: data.filter(d => d.synced_to_osf).length,
+      not_synced: data.filter(d => !d.synced_to_osf).length
+    };
+
+    // Calculate average completion time if possible
+    const completionTimes = [];
+    data.forEach(participant => {
+      if (Array.isArray(participant.data) && participant.data.length > 0) {
+        const firstTrial = participant.data[0];
+        const lastTrial = participant.data[participant.data.length - 1];
+        if (firstTrial.time_elapsed && lastTrial.time_elapsed) {
+          completionTimes.push(lastTrial.time_elapsed - firstTrial.time_elapsed);
+        }
+      }
+    });
+
+    if (completionTimes.length > 0) {
+      summary.average_completion_time_ms = Math.round(
+        completionTimes.reduce((a, b) => a + b, 0) / completionTimes.length
+      );
+      summary.average_completion_time_minutes = Math.round(
+        summary.average_completion_time_ms / 60000 * 10
+      ) / 10;
+    }
+
+    res.json(summary);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /experiments/:id/data/:participantId - Get data for specific participant
 router.get('/:id/data/:participantId', auth, async (req, res) => {
   try {
@@ -219,62 +275,6 @@ router.delete('/:id/data/:participantId', auth, async (req, res) => {
     }
 
     res.json({ success: true, message: 'Participant data deleted' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// GET /experiments/:id/data/summary - Get summary statistics
-router.get('/:id/data/summary', auth, async (req, res) => {
-  try {
-    // Verify experiment ownership
-    const experiment = await Experiment.findOne({
-      where: { id: req.params.id, user_id: req.user.id }
-    });
-    
-    if (!experiment) {
-      return res.status(404).json({ error: 'Experiment not found' });
-    }
-
-    // Get all data
-    const data = await ExperimentData.findAll({
-      where: { experiment_id: experiment.id }
-    });
-
-    // Calculate summary statistics
-    const summary = {
-      experiment_id: experiment.id,
-      experiment_title: experiment.title,
-      total_participants: data.length,
-      participants_with_prolific_id: data.filter(d => d.prolific_pid).length,
-      first_participant: data.length > 0 ? data[data.length - 1].created_at : null,
-      last_participant: data.length > 0 ? data[0].created_at : null,
-      synced_to_osf: data.filter(d => d.synced_to_osf).length,
-      not_synced: data.filter(d => !d.synced_to_osf).length
-    };
-
-    // Calculate average completion time if possible
-    const completionTimes = [];
-    data.forEach(participant => {
-      if (Array.isArray(participant.data) && participant.data.length > 0) {
-        const firstTrial = participant.data[0];
-        const lastTrial = participant.data[participant.data.length - 1];
-        if (firstTrial.time_elapsed && lastTrial.time_elapsed) {
-          completionTimes.push(lastTrial.time_elapsed - firstTrial.time_elapsed);
-        }
-      }
-    });
-
-    if (completionTimes.length > 0) {
-      summary.average_completion_time_ms = Math.round(
-        completionTimes.reduce((a, b) => a + b, 0) / completionTimes.length
-      );
-      summary.average_completion_time_minutes = Math.round(
-        summary.average_completion_time_ms / 60000 * 10
-      ) / 10;
-    }
-
-    res.json(summary);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
