@@ -8,9 +8,9 @@ servers:
     description: Production server
 
 paths:
-  /auth/signin:
+  /auth/login:
     post:
-      summary: Sign in
+      summary: Log in
       requestBody:
         required: true
         content:
