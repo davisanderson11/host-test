@@ -43,6 +43,13 @@ app.use('/run/:id/assets', (req, res, next) => {
   express.static(uploadPath)(req, res, next);
 });
 
+// Also serve at /files path for compatibility
+app.use('/run/:id/files', (req, res, next) => {
+  const experimentId = req.params.id;
+  const uploadPath = path.join(__dirname, process.env.UPLOAD_DIR || './uploads', 'experiments', experimentId);
+  express.static(uploadPath)(req, res, next);
+});
+
 // Sync DB then start server
 const sequelizeInstance = db.sequelize;
 sequelizeInstance.sync({ alter: true })
