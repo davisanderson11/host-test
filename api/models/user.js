@@ -17,6 +17,16 @@ const User = sequelize.define('User', {
     type: DataTypes.TEXT,
     allowNull: false,
     field: 'password_hash'
+  },
+  prolificApiToken: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    field: 'prolific_api_token'
+  },
+  prolificWorkspaceId: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    field: 'prolific_workspace_id'
   }
 }, {
   tableName: 'users',

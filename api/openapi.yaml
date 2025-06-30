@@ -112,6 +112,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /auth/account:
+    delete:
+      tags: [Authentication]
+      summary: Delete user account
+      description: Permanently deletes the user account and all associated data including experiments and participant data
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Account deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        '401':
+          description: Unauthorized or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /profile:
     get:
       tags: [Profile]
@@ -125,6 +154,73 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+  /profile/link-prolific:
+    put:
+      tags: [Profile]
+      summary: Link Prolific account
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prolificApiToken:
+                  type: string
+                  description: Prolific API token from your Prolific account settings
+              required: [prolificApiToken]
+      responses:
+        '200':
+          description: Prolific account linked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  prolificUser:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      email: { type: string }
+                      workspace_id: { type: string }
+        '400':
+          description: Invalid token or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+  /profile/unlink-prolific:
+    delete:
+      tags: [Profile]
+      summary: Unlink Prolific account
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Prolific account unlinked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
         '401':
           description: Unauthorized
           content:
@@ -992,6 +1088,17 @@ components:
         created_at:
           type: string
           format: date-time
+        prolificApiToken:
+          type: string
+          nullable: true
+          description: Masked Prolific API token (shows **** if set)
+        prolificWorkspaceId:
+          type: string
+          nullable: true
+          description: Prolific workspace ID
+        isProlificLinked:
+          type: boolean
+          description: Whether a Prolific account is linked
     
     Experiment:
       type: object
