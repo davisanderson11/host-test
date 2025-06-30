@@ -46,7 +46,7 @@ router.post(
       const token = jwt.sign(
         { id: user.id, email: user.email },
         process.env.JWT_SECRET,
-        { expiresIn: '1h' }
+        { expiresIn: '24h' }
       );
       res.json({ token });
     } catch (err) {
@@ -54,5 +54,45 @@ router.post(
     }
   }
 );
+
+// Delete account
+router.delete('/account', async (req, res) => {
+  const header = req.headers.authorization;
+  if (!header) return res.status(401).json({ error: 'No token provided' });
+  const token = header.split(' ')[1];
+  
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Find user
+    const user = await User.findByPk(payload.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    // Delete all user's experiments and data first
+    const Experiment = require('../models/experiment');
+    const ExperimentData = require('../models/experimentData');
+    
+    // Get all user's experiments
+    const experiments = await Experiment.findAll({ where: { user_id: user.id } });
+    
+    // Delete all experiment data for each experiment
+    for (const exp of experiments) {
+      await ExperimentData.destroy({ where: { experiment_id: exp.id } });
+    }
+    
+    // Delete all experiments
+    await Experiment.destroy({ where: { user_id: user.id } });
+    
+    // Finally delete the user
+    await user.destroy();
+    
+    res.json({ message: 'Account and all associated data deleted successfully' });
+  } catch (err) {
+    if (err.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
 
 module.exports = router;

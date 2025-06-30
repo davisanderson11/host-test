@@ -6,7 +6,7 @@ const Experiment = require('../models/experiment');
 
 const router = express.Router();
 
-// Auth middleware (same as in profile.js)
+// Auth middleware
 const auth = (req, res, next) => {
   const header = req.headers.authorization;
   if (!header) return res.status(401).json({ error: 'No token provided' });
@@ -31,7 +31,7 @@ router.post(
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
     try {
       const exp = await Experiment.create({
-        userId: req.user.id,
+        user_id: req.user.id,
         title: req.body.title,
         description: req.body.description || null
       });
@@ -45,7 +45,7 @@ router.post(
 // GET /experiments
 router.get('/', auth, async (req, res) => {
   try {
-    const exps = await Experiment.findAll({ where: { userId: req.user.id } });
+    const exps = await Experiment.findAll({ where: { user_id: req.user.id } });
     res.json(exps);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -56,7 +56,7 @@ router.get('/', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const exp = await Experiment.findOne({
-      where: { id: req.params.id, userId: req.user.id }
+      where: { id: req.params.id, user_id: req.user.id }
     });
     if (!exp) return res.status(404).json({ error: 'Experiment not found' });
     res.json(exp);
@@ -76,7 +76,7 @@ router.put(
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
     try {
       const exp = await Experiment.findOne({
-        where: { id: req.params.id, userId: req.user.id }
+        where: { id: req.params.id, user_id: req.user.id }
       });
       if (!exp) return res.status(404).json({ error: 'Experiment not found' });
       await exp.update(req.body);
@@ -91,10 +91,40 @@ router.put(
 router.delete('/:id', auth, async (req, res) => {
   try {
     const deleted = await Experiment.destroy({
-      where: { id: req.params.id, userId: req.user.id }
+      where: { id: req.params.id, user_id: req.user.id }
     });
     if (!deleted) return res.status(404).json({ error: 'Experiment not found' });
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Toggle experiment live status
+router.patch('/:id/status', auth, async (req, res) => {
+  try {
+    const experiment = await Experiment.findOne({
+      where: { id: req.params.id, user_id: req.user.id }
+    });
+    if (!experiment) return res.status(404).json({ error: 'Experiment not found' });
+    
+    // Generate completion code if going live for the first time
+    if (!experiment.live && !experiment.completion_code) {
+      const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+      await experiment.update({ 
+        live: true, 
+        completion_code: code 
+      });
+    } else {
+      await experiment.update({ live: !experiment.live });
+    }
+    
+    res.json({ 
+      id: experiment.id,
+      live: experiment.live,
+      completion_code: experiment.completion_code,
+      public_url: `${process.env.PUBLIC_URL}/run/${experiment.id}`
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

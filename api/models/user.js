@@ -15,14 +15,36 @@ const User = sequelize.define('User', {
   },
   passwordHash: {
     type: DataTypes.TEXT,
-    allowNull: false,
+    allowNull: true,
     field: 'password_hash'
+  },
+  prolificApiToken: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    field: 'prolific_api_token'
+  },
+  prolificWorkspaceId: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    field: 'prolific_workspace_id'
+  },
+  isAdmin: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    field: 'is_admin'
   }
 }, {
   tableName: 'users',
   timestamps: true,
   createdAt: 'created_at',
-  updatedAt: false
+  updatedAt: false,
+  validate: {
+    hasAuthMethod() {
+      if (!this.passwordHash) {
+        throw new Error('User must have a password for authentication');
+      }
+    }
+  }
 });
 
 module.exports = User;
