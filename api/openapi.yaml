@@ -1,16 +1,39 @@
 openapi: 3.0.3
 info:
-  title: jsPsych Host Site API
+  title: Host API
   version: 0.1.0
+  description: API for experiment hosting platform with Sequelize
 
 servers:
+  - url: http://localhost:3000
+    description: Development server
   - url: https://api.yoursite.com
     description: Production server
 
 paths:
-  /auth/login:
+  /ping:
+    get:
+      summary: Health check endpoint
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  now: { type: string, format: date-time }
+        '500':
+          description: Database connection error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/signup:
     post:
-      summary: Log in
+      summary: Create a new user account
       requestBody:
         required: true
         content:
@@ -18,12 +41,73 @@ paths:
             schema:
               type: object
               properties:
-                email:   { type: string }
-                password:{ type: string }
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 6
+              required: [email, password]
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  email: { type: string }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '409':
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      summary: Authenticate user and get JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
               required: [email, password]
       responses:
         '200':
-          description: JWT & user info
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string, description: 'JWT token (expires in 1 hour)' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /profile:
     get:
@@ -32,103 +116,190 @@ paths:
         - bearerAuth: []
       responses:
         '200':
+          description: User profile
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserProfile'
-    patch:
-      summary: Update profile
-      security:
-        - bearerAuth: []
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserProfileUpdate'
-      responses:
-        '200':
-          description: Profile updated
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /experiments:
     get:
-      summary: List your experiments
+      summary: List all experiments for authenticated user
       security:
         - bearerAuth: []
       responses:
         '200':
+          description: List of experiments
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/Experiment'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
     post:
       summary: Create a new experiment
       security:
         - bearerAuth: []
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NewExperiment'
+              type: object
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                description:
+                  type: string
+                  nullable: true
+              required: [title]
       responses:
         '201':
+          description: Experiment created
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Experiment'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
-  /experiments/{expId}/jspsych:
-    post:
-      summary: Upload jsPsych bundle
+  /experiments/{id}:
+    get:
+      summary: Get a specific experiment by ID
       security:
         - bearerAuth: []
       parameters:
         - in: path
-          name: expId
-          schema: { type: string }
+          name: id
           required: true
-      requestBody:
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                file:
-                  type: string
-                  format: binary
-      responses:
-        '201':
-          description: Bundle stored
-
-  /experiments/{expId}/participants:
-    get:
-      summary: List participants
-      security: [ bearerAuth: [] ]
-      parameters:
-        - in: path
-          name: expId
-          schema: { type: string }
-          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         '200':
+          description: Experiment details
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Participant'
-    post:
-      summary: Add a participant
-      security: [ bearerAuth: [] ]
+                $ref: '#/components/schemas/Experiment'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Experiment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+    put:
+      summary: Update an experiment
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AddParticipant'
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                  nullable: true
       responses:
         '200':
-          description: Added
+          description: Experiment updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Experiment'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Experiment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+    delete:
+      summary: Delete an experiment
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Experiment deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Experiment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
 components:
   securitySchemes:
@@ -136,41 +307,75 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: JWT token obtained from /auth/login endpoint (expires in 1 hour)
 
   schemas:
     UserProfile:
       type: object
       properties:
-        id:       { type: string }
-        email:    { type: string }
-        name:     { type: string }
-        organizationId: { type: string, nullable: true }
-        priority: { type: boolean }
-    UserProfileUpdate:
-      type: object
-      properties:
-        name:     { type: string }
-        organizationId: { type: string }
-    NewExperiment:
-      type: object
-      properties:
-        title:     { type: string }
-        description:{ type: string }
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        created_at:
+          type: string
+          format: date-time
+    
     Experiment:
-      allOf:
-        - $ref: '#/components/schemas/NewExperiment'
-        - type: object
-          properties:
-            id:       { type: string }
-            status:   { type: string, enum: [draft, live, ended] }
-            createdAt:{ type: string, format: date-time }
-    Participant:
       type: object
       properties:
-        id:           { type: string }
-        prolificPid:  { type: string }
-    AddParticipant:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        live:
+          type: boolean
+          default: false
+        user_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    
+    Error:
       type: object
       properties:
-        prolificPid:  { type: string }
-      required: [prolificPid]
+        error:
+          type: string
+    
+    ValidationError:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              msg:
+                type: string
+              path:
+                type: string
+              location:
+                type: string
+
+tags:
+  - name: Authentication
+    description: User authentication endpoints
+  - name: Profile
+    description: User profile management
+  - name: Experiments
+    description: Experiment management
+  - name: Health
+    description: Health check endpoints
