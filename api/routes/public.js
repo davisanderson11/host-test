@@ -21,115 +21,328 @@ router.get('/run/:id', async (req, res) => {
       return res.status(403).send('This experiment is not currently live');
     }
 
-    // Generate a unique session ID
-    const sessionId = uuidv4();
+    const experimentPath = path.join(__dirname, '..', process.env.UPLOAD_DIR || './uploads', 'experiments', experiment.id);
     
-    // Get Prolific PID from URL query params
-    const prolificPid = req.query.PROLIFIC_PID || req.query.prolific_pid || null;
+    // Check if index.html exists
+    try {
+      await fs.access(path.join(experimentPath, 'index.html'));
+      // If index.html exists, inject our data collection script into it
+      const indexHtml = await fs.readFile(path.join(experimentPath, 'index.html'), 'utf8');
+      
+      // Generate session ID and get Prolific PID
+      const sessionId = uuidv4();
+      const prolificPid = req.query.PROLIFIC_PID || req.query.prolific_pid || null;
+      
+      // Inject our data collection script before the closing body tag
+      const dataCollectionScript = `
+      <script>
+        // Injected by experiment host
+        (function() {
+          const experimentId = "${experiment.id}";
+          const sessionId = "${sessionId}";
+          const prolificPid = ${JSON.stringify(prolificPid)};
+          const completionCode = "${experiment.completion_code || 'COMPLETED'}";
+          let dataSaved = false;
+          
+          // Data saving function
+          async function saveDataToServer(data) {
+            if (dataSaved) return;
+            
+            try {
+              const response = await fetch('/run/' + experimentId + '/data', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  session_id: sessionId,
+                  prolific_pid: prolificPid,
+                  data: data
+                })
+              });
+              
+              if (!response.ok) {
+                throw new Error('Failed to save data');
+              }
+              
+              dataSaved = true;
+              console.log('Data saved to server successfully');
+              return await response.json();
+            } catch (error) {
+              console.error('Error saving data:', error);
+              alert('There was an error saving your data. Please contact the researcher.');
+              throw error;
+            }
+          }
+          
+          // Wait for jsPsych to load
+          function interceptJsPsych() {
+            if (typeof jsPsych !== 'undefined') {
+              console.log('jsPsych detected, version:', jsPsych.version);
+              
+              // For jsPsych v8+ (uses initJsPsych function)
+              if (typeof initJsPsych !== 'undefined') {
+                const originalInitJsPsych = window.initJsPsych;
+                window.initJsPsych = function(config) {
+                  // Add our on_finish handler
+                  const originalOnFinish = config ? config.on_finish : undefined;
+                  if (!config) config = {};
+                  
+                  config.on_finish = function(data) {
+                    console.log('Experiment finished, saving data...');
+                    saveDataToServer(data.json());
+                    if (originalOnFinish) originalOnFinish(data);
+                  };
+                  
+                  // Create jsPsych instance
+                  const jsPsychInstance = originalInitJsPsych(config);
+                  
+                  // Override the instance's data.localSave
+                  if (jsPsychInstance.data) {
+                    jsPsychInstance.data.localSave = function(filename, format) {
+                      console.log('localSave intercepted - saving to server');
+                      const data = format === 'csv' ? this.get().csv() : this.get().json();
+                      saveDataToServer(data);
+                    };
+                    
+                    // Also override get().localSave
+                    const originalGet = jsPsychInstance.data.get;
+                    jsPsychInstance.data.get = function() {
+                      const dataCollection = originalGet.call(this);
+                      dataCollection.localSave = function(filename, format) {
+                        console.log('DataCollection localSave intercepted');
+                        const data = format === 'csv' ? this.csv() : this.json();
+                        saveDataToServer(data);
+                      };
+                      return dataCollection;
+                    };
+                  }
+                  
+                  return jsPsychInstance;
+                };
+                console.log('jsPsych v8+ interception complete');
+              }
+              
+              // For jsPsych v7
+              else if (jsPsych.version && jsPsych.run) {
+                const originalRun = jsPsych.run;
+                jsPsych.run = function(timeline) {
+                  // Add completion handler to timeline
+                  if (Array.isArray(timeline)) {
+                    timeline.push({
+                      type: jsPsychHtmlKeyboardResponse,
+                      stimulus: 'Saving data...',
+                      choices: "NO_KEYS",
+                      trial_duration: 100,
+                      on_load: function() {
+                        saveDataToServer(jsPsych.data.get().json());
+                      }
+                    });
+                  }
+                  return originalRun.call(this, timeline);
+                };
+                
+                // Override localSave
+                if (jsPsych.data) {
+                  jsPsych.data.localSave = function(filename, format) {
+                    console.log('localSave intercepted - saving to server');
+                    const data = format === 'csv' ? jsPsych.data.get().csv() : jsPsych.data.get().json();
+                    saveDataToServer(data);
+                  };
+                }
+                console.log('jsPsych v7 interception complete');
+              }
+              
+              // For jsPsych v6 and older
+              else if (jsPsych.init) {
+                const originalInit = jsPsych.init;
+                jsPsych.init = function(config) {
+                  const originalOnFinish = config.on_finish;
+                  config.on_finish = function() {
+                    saveDataToServer(jsPsych.data.get().json());
+                    if (originalOnFinish) originalOnFinish();
+                  };
+                  return originalInit.call(this, config);
+                };
+                console.log('jsPsych v6 interception complete');
+              }
+              
+              // Override jsPsych.data.get().localSave for all versions
+              if (jsPsych.data && jsPsych.data.get) {
+                const originalGet = jsPsych.data.get;
+                jsPsych.data.get = function() {
+                  const dataCollection = originalGet.call(this);
+                  if (dataCollection.localSave) {
+                    dataCollection.localSave = function(filename, format) {
+                      console.log('DataCollection localSave intercepted');
+                      const data = format === 'csv' ? this.csv() : this.json();
+                      saveDataToServer(data);
+                    };
+                  }
+                  return dataCollection;
+                };
+              }
+              
+            } else {
+              // Try again in 100ms
+              setTimeout(interceptJsPsych, 100);
+            }
+          }
+          
+          // Start interception
+          interceptJsPsych();
+          
+          // Also try on DOMContentLoaded
+          document.addEventListener('DOMContentLoaded', interceptJsPsych);
+          
+          // And on window load
+          window.addEventListener('load', interceptJsPsych);
+        })();
+      </script>
+      `;
+      
+      // Inject before </body> or at the end if no body tag
+      let modifiedHtml;
+      if (indexHtml.includes('</body>')) {
+        modifiedHtml = indexHtml.replace('</body>', dataCollectionScript + '</body>');
+      } else {
+        modifiedHtml = indexHtml + dataCollectionScript;
+      }
+      
+      res.send(modifiedHtml);
+      
+    } catch (error) {
+      // No index.html, check for other files
+      const files = await fs.readdir(experimentPath);
+      
+      if (files.includes('experiment.js')) {
+        // Serve our wrapper for JS experiments
+        res.send(createJsExperimentWrapper(experiment));
+      } else if (files.length > 0) {
+        // Just redirect to the first HTML file found
+        const htmlFile = files.find(f => f.endsWith('.html'));
+        if (htmlFile) {
+          res.redirect(`/run/${experiment.id}/assets/${htmlFile}`);
+        } else {
+          res.status(400).send('No valid experiment files found (index.html or experiment.js required)');
+        }
+      } else {
+        res.status(400).send('No experiment files uploaded');
+      }
+    }
+  } catch (error) {
+    console.error('Error serving experiment:', error);
+    res.status(500).send('Internal server error');
+  }
+});
 
-    // Create the experiment runner HTML
-    const html = `
+// Helper function to create wrapper for JS experiments
+function createJsExperimentWrapper(experiment) {
+  const sessionId = uuidv4();
+  const prolificPid = null; // Will be captured from URL params if present
+  
+  return `
 <!DOCTYPE html>
 <html>
 <head>
     <title>${experiment.title}</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://unpkg.com/jspsych@7.3.4"></script>
-    <link href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css" rel="stylesheet" type="text/css" />
+    <script src="https://unpkg.com/jspsych@8.2.1"></script>
+    <link href="https://unpkg.com/jspsych@8.2.1/css/jspsych.css" rel="stylesheet" type="text/css" />
 </head>
 <body>
     <div id="jspsych-target"></div>
     <script>
-        // Experiment configuration
+      // Data collection script for JS experiments
+      (function() {
         const experimentId = "${experiment.id}";
         const sessionId = "${sessionId}";
-        const prolificPid = ${JSON.stringify(prolificPid)};
+        const urlParams = new URLSearchParams(window.location.search);
+        const prolificPid = urlParams.get('PROLIFIC_PID') || urlParams.get('prolific_pid');
         const completionCode = "${experiment.completion_code || 'COMPLETED'}";
+        let dataSaved = false;
         
-        // Data saving function
-        async function saveData(data) {
-            try {
-                const response = await fetch('/run/' + experimentId + '/data', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        session_id: sessionId,
-                        prolific_pid: prolificPid,
-                        data: data
-                    })
-                });
-                
-                if (!response.ok) {
-                    throw new Error('Failed to save data');
-                }
-                
-                return await response.json();
-            } catch (error) {
-                console.error('Error saving data:', error);
-                alert('There was an error saving your data. Please contact the researcher.');
-            }
-        }
-        
-        // Override jsPsych.data.get().json() to save automatically
-        const originalDataGet = jsPsych.data.get;
-        jsPsych.data.get = function() {
-            const dataObj = originalDataGet.call(this);
-            const originalJson = dataObj.json;
-            dataObj.json = function() {
-                const jsonData = originalJson.call(this);
-                // Save data when experiment ends
-                if (typeof saveData !== 'undefined') {
-                    saveData(jsonData);
-                }
-                return jsonData;
-            };
-            return dataObj;
-        };
-    </script>
-    <!-- Load the experiment script -->
-    <script src="/run/${experiment.id}/assets/experiment.js"></script>
-    <script>
-        // Add completion code display at the end
-        if (typeof timeline !== 'undefined' && Array.isArray(timeline)) {
-            timeline.push({
-                type: jsPsychHtmlKeyboardResponse,
-                stimulus: function() {
-                    // Save final data
-                    const data = jsPsych.data.get().json();
-                    saveData(data);
-                    
-                    return \`
-                        <h2>Thank you for completing the experiment!</h2>
-                        <p>Your completion code is:</p>
-                        <h1 style="font-family: monospace; background: #f0f0f0; padding: 20px; border-radius: 5px;">
-                            \${completionCode}
-                        </h1>
-                        <p>Please copy this code and return to Prolific to paste it.</p>
-                        <p>Press any key to continue.</p>
-                    \`;
-                },
-                on_finish: function() {
-                    // Redirect to Prolific if we have the completion URL
-                    if (prolificPid) {
-                        window.location.href = \`https://app.prolific.co/submissions/complete?cc=\${completionCode}\`;
-                    }
-                }
+        async function saveDataToServer(data) {
+          if (dataSaved) return;
+          
+          try {
+            const response = await fetch('/run/' + experimentId + '/data', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                session_id: sessionId,
+                prolific_pid: prolificPid,
+                data: data
+              })
             });
+            
+            if (!response.ok) {
+              throw new Error('Failed to save data');
+            }
+            
+            dataSaved = true;
+            console.log('Data saved to server successfully');
+            return await response.json();
+          } catch (error) {
+            console.error('Error saving data:', error);
+            alert('There was an error saving your data. Please contact the researcher.');
+            throw error;
+          }
         }
+        
+        // Intercept data saving
+        function interceptJsPsych() {
+          // For jsPsych v8+
+          if (typeof initJsPsych !== 'undefined') {
+            const originalInitJsPsych = window.initJsPsych;
+            window.initJsPsych = function(config) {
+              const originalOnFinish = config ? config.on_finish : undefined;
+              if (!config) config = {};
+              
+              config.on_finish = function(data) {
+                console.log('Experiment finished, saving data...');
+                saveDataToServer(data.json());
+                if (originalOnFinish) originalOnFinish(data);
+              };
+              
+              const jsPsychInstance = originalInitJsPsych(config);
+              
+              if (jsPsychInstance.data) {
+                jsPsychInstance.data.localSave = function(filename, format) {
+                  console.log('localSave intercepted - saving to server');
+                  const data = format === 'csv' ? this.get().csv() : this.get().json();
+                  saveDataToServer(data);
+                };
+              }
+              
+              return jsPsychInstance;
+            };
+          }
+          // For older versions
+          else if (typeof jsPsych !== 'undefined') {
+            if (jsPsych.data) {
+              jsPsych.data.localSave = function(filename, format) {
+                console.log('localSave intercepted - saving to server');
+                const data = format === 'csv' ? jsPsych.data.get().csv() : jsPsych.data.get().json();
+                saveDataToServer(data);
+              };
+            }
+          } else {
+            setTimeout(interceptJsPsych, 100);
+          }
+        }
+        
+        interceptJsPsych();
+      })();
     </script>
+    <script src="/run/${experiment.id}/assets/experiment.js"></script>
 </body>
 </html>
-    `;
-    
-    res.send(html);
-  } catch (error) {
-    console.error('Error serving experiment:', error);
-    res.status(500).send('Internal server error');
-  }
-});
+  `;
+}
 
 // POST /run/:id/data - Save experiment data
 router.post('/run/:id/data', express.json(), async (req, res) => {
@@ -146,13 +359,26 @@ router.post('/run/:id/data', express.json(), async (req, res) => {
       return res.status(404).json({ error: 'Experiment not found' });
     }
 
+    // Parse data if it's a string (from jsPsych.data.get().json())
+    let parsedData = data;
+    if (typeof data === 'string') {
+      try {
+        parsedData = JSON.parse(data);
+      } catch (e) {
+        // If parsing fails, keep as string
+        parsedData = data;
+      }
+    }
+
     // Save the data
     const experimentData = await ExperimentData.create({
       experiment_id: experiment.id,
       session_id,
       prolific_pid,
-      data: data
+      data: parsedData
     });
+
+    console.log(`Data saved for experiment ${experiment.id}, session ${session_id}`);
 
     res.json({ 
       success: true, 
@@ -161,7 +387,7 @@ router.post('/run/:id/data', express.json(), async (req, res) => {
     });
   } catch (error) {
     console.error('Error saving data:', error);
-    res.status(500).json({ error: 'Failed to save data' });
+    res.status(500).json({ error: 'Failed to save data: ' + error.message });
   }
 });
 
