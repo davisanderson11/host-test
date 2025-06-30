@@ -2,9 +2,23 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs').promises;
+const jwt = require('jsonwebtoken');
 const { upload, UPLOAD_DIR } = require('../config/upload');
-const auth = require('../middleware/auth');
-const Experiment = require('../models/experiment');
+const Experiment = require('../models/Experiment');
+
+// Auth middleware
+const auth = (req, res, next) => {
+  const header = req.headers.authorization;
+  if (!header) return res.status(401).json({ error: 'No token provided' });
+  const token = header.split(' ')[1];
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = payload;
+    next();
+  } catch {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+};
 
 // Upload files for an experiment
 router.post('/:id/upload', auth, upload.array('files'), async (req, res) => {
