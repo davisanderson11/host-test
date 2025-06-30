@@ -13,6 +13,8 @@ const dataRouter = require('./routes/data');
 const datapipeRouter = require('./routes/datapipe');
 const dashboardRouter = require('./routes/dashboard');
 const dataDeletionRouter = require('./routes/dataDeletion');
+const prolificRouter = require('./routes/prolific');
+const adminRouter = require('./routes/admin');
 
 const app = express();
 app.use(cors());
@@ -44,8 +46,12 @@ app.use('/experiments', dataRouter);
 // DataPipe integration
 app.use('/datapipe', datapipeRouter);
 app.use('/experiments', datapipeRouter);
+// Prolific integration
+app.use('/experiments', prolificRouter);
 // Dashboard
 app.use('/dashboard', dashboardRouter);
+// Admin routes
+app.use('/admin', adminRouter);
 
 // Public routes (no auth required)
 app.use('/', publicRouter);

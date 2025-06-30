@@ -23,13 +23,14 @@ const auth = (req, res, next) => {
 router.get('/', auth, async (req, res) => {
   try {
     const user = await User.findByPk(req.user.id, {
-      attributes: ['id', 'email', 'created_at', 'prolificApiToken', 'prolificWorkspaceId']
+      attributes: ['id', 'email', 'created_at', 'prolificApiToken', 'prolificWorkspaceId', 'isAdmin']
     });
     // Don't expose the full token, just indicate if it's linked
     const response = {
       ...user.toJSON(),
       prolificApiToken: user.prolificApiToken ? '****' : null,
-      isProlificLinked: !!user.prolificApiToken
+      isProlificLinked: !!user.prolificApiToken,
+      isAdmin: user.isAdmin || false
     };
     res.json(response);
   } catch (err) {

@@ -27,6 +27,11 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING,
     allowNull: true,
     field: 'prolific_workspace_id'
+  },
+  isAdmin: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    field: 'is_admin'
   }
 }, {
   tableName: 'users',

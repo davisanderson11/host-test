@@ -938,6 +938,154 @@ paths:
                   unsynced_data_points: { type: number }
                   last_sync: { type: string, format: date-time, nullable: true }
                   osf_project_url: { type: string, nullable: true }
+                  
+  /experiments/{id}/prolific/create:
+    post:
+      tags: [Prolific]
+      summary: Create a Prolific study for an experiment
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Study name shown on Prolific
+                description:
+                  type: string
+                  description: Study description for participants
+                estimated_completion_time:
+                  type: integer
+                  minimum: 1
+                  description: Estimated time in minutes
+                reward:
+                  type: integer
+                  minimum: 0
+                  description: Payment per participant in pence/cents
+                total_available_places:
+                  type: integer
+                  minimum: 1
+                  description: Number of participants needed
+                device_compatibility:
+                  type: array
+                  items:
+                    type: string
+                    enum: [desktop, tablet, mobile]
+                  default: [desktop, tablet, mobile]
+                eligibility_requirements:
+                  type: array
+                  items:
+                    type: object
+                  description: Prolific screening criteria
+              required: [name, description, estimated_completion_time, reward, total_available_places]
+      responses:
+        '200':
+          description: Prolific study created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  prolific_study_id: { type: string }
+                  status: { type: string }
+                  study_url: { type: string }
+                  completion_code: { type: string }
+                  prolific_dashboard_url: { type: string }
+                  
+  /experiments/{id}/prolific/publish:
+    post:
+      tags: [Prolific]
+      summary: Publish study to start collecting data
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Study published
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  prolific_study_id: { type: string }
+                  status: { type: string }
+                  
+  /experiments/{id}/prolific/status:
+    get:
+      tags: [Prolific]
+      summary: Get Prolific study status
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Study status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  prolific_enabled: { type: boolean }
+                  prolific_study_id: { type: string }
+                  status: { type: string }
+                  name: { type: string }
+                  total_available_places: { type: integer }
+                  places_taken: { type: integer }
+                  submission_count: { type: integer }
+                  reward: { type: integer }
+                  average_completion_time: { type: number }
+                  created_at: { type: string, format: date-time }
+                  started_at: { type: string, format: date-time, nullable: true }
+                  
+  /experiments/{id}/prolific/stop:
+    post:
+      tags: [Prolific]
+      summary: Stop a running Prolific study
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Study stopped
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  prolific_study_id: { type: string }
+                  status: { type: string }
 
   /run/{id}:
     get:
@@ -1324,3 +1472,5 @@ tags:
     description: Health check endpoints
   - name: Dashboard
     description: Dashboard and analytics endpoints
+  - name: Prolific
+    description: Prolific study management
