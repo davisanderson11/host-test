@@ -55,8 +55,13 @@ router.post('/:id/prolific/create',
         return res.status(400).json({ error: 'Prolific account not linked. Please link your Prolific account first.' });
       }
 
-      // Build study URL
-      const studyUrl = `${process.env.PUBLIC_URL || 'http://localhost:3000'}/run/${experiment.id}`;
+      // Build study URL - needs to include Prolific URL parameters
+      const baseUrl = process.env.PUBLIC_URL && !process.env.PUBLIC_URL.includes('localhost') 
+        ? `${process.env.PUBLIC_URL}/run/${experiment.id}`
+        : 'https://www.jspsych.org';
+      
+      // Prolific requires these URL parameters to be included
+      const studyUrl = `${baseUrl}?PROLIFIC_PID={{%PROLIFIC_PID%}}&STUDY_ID={{%STUDY_ID%}}&SESSION_ID={{%SESSION_ID%}}`;
       
       // Create Prolific study
       const studyData = {
@@ -75,6 +80,7 @@ router.post('/:id/prolific/create',
         eligibility_requirements: req.body.eligibility_requirements || []
       };
 
+      console.log('Creating Prolific study with data:', JSON.stringify(studyData, null, 2));
       const prolificStudy = await prolificService.createStudy(user.prolificApiToken, studyData);
 
       // Update experiment with Prolific study ID
@@ -92,7 +98,17 @@ router.post('/:id/prolific/create',
         prolific_dashboard_url: `https://app.prolific.com/researcher/workspaces/${user.prolificWorkspaceId}/studies/${prolificStudy.id}`
       });
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      // Check for specific Prolific errors
+      if (error.message.includes('finance section')) {
+        res.status(400).json({ 
+          error: 'Prolific account setup incomplete',
+          message: 'Please complete your Prolific account setup: Add your billing address in the Finance section at https://app.prolific.com',
+          prolific_study_id: experiment.prolific_study_id,
+          status: 'draft'
+        });
+      } else {
+        res.status(500).json({ error: error.message });
+      }
     }
   }
 );

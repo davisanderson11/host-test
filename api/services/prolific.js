@@ -26,8 +26,29 @@ class ProlificService {
       );
       return response.data;
     } catch (error) {
-      console.error('Prolific create study error:', error.response?.data || error.message);
-      throw new Error(`Failed to create Prolific study: ${error.response?.data?.error || error.message}`);
+      console.error('Prolific create study error:', JSON.stringify(error.response?.data, null, 2) || error.message);
+      
+      // Better error handling
+      if (error.response?.data) {
+        const errorData = error.response.data;
+        let errorMessage = '';
+        
+        if (errorData.error) {
+          errorMessage = `${errorData.error.title}`;
+          if (errorData.error.detail) {
+            // Get the actual error messages from the detail object
+            for (const [field, messages] of Object.entries(errorData.error.detail)) {
+              errorMessage += ` ${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`;
+            }
+          }
+        } else {
+          errorMessage = errorData.message || JSON.stringify(errorData);
+        }
+        
+        throw new Error(`Failed to create Prolific study: ${errorMessage}`);
+      }
+      
+      throw new Error(`Failed to create Prolific study: ${error.message}`);
     }
   }
 

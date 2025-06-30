@@ -35,7 +35,7 @@ const adminAuth = async (req, res, next) => {
 router.get('/users', adminAuth, async (req, res) => {
   try {
     const users = await User.findAll({
-      attributes: ['id', 'email', 'created_at', 'isAdmin', 'isProlificLinked'],
+      attributes: ['id', 'email', 'created_at', 'isAdmin', 'prolificApiToken'],
       order: [['created_at', 'DESC']]
     });
     
