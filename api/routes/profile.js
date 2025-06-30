@@ -52,6 +52,7 @@ const validateProlificToken = async (token) => {
     }
     
     const userData = await response.json();
+    console.log('Prolific API response:', JSON.stringify(userData, null, 2));
     return { valid: true, userData };
   } catch (error) {
     return { valid: false, error: 'Failed to validate token with Prolific' };
