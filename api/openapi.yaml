@@ -1,16 +1,41 @@
 openapi: 3.0.3
 info:
-  title: jsPsych Host Site API
+  title: Host API
   version: 0.1.0
+  description: API for experiment hosting platform with jsPsych, DataPipe, and Prolific integration
 
 servers:
+  - url: http://localhost:3000
+    description: Development server
   - url: https://api.yoursite.com
     description: Production server
 
 paths:
-  /auth/login:
+  /ping:
+    get:
+      tags: [Health]
+      summary: Health check endpoint
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  now: { type: string, format: date-time }
+        '500':
+          description: Database connection error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/signup:
     post:
-      summary: Log in
+      tags: [Authentication]
+      summary: Create a new user account
       requestBody:
         required: true
         content:
@@ -18,117 +43,933 @@ paths:
             schema:
               type: object
               properties:
-                email:   { type: string }
-                password:{ type: string }
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 6
+              required: [email, password]
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  email: { type: string }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '409':
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Authenticate user and get JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
               required: [email, password]
       responses:
         '200':
-          description: JWT & user info
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string, description: 'JWT token' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /profile:
     get:
+      tags: [Profile]
       summary: Get current user profile
       security:
         - bearerAuth: []
       responses:
         '200':
+          description: User profile
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserProfile'
-    patch:
-      summary: Update profile
-      security:
-        - bearerAuth: []
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserProfileUpdate'
-      responses:
-        '200':
-          description: Profile updated
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /experiments:
     get:
-      summary: List your experiments
+      tags: [Experiments]
+      summary: List all experiments for authenticated user
       security:
         - bearerAuth: []
       responses:
         '200':
+          description: List of experiments
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/Experiment'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
     post:
+      tags: [Experiments]
       summary: Create a new experiment
       security:
         - bearerAuth: []
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NewExperiment'
+              type: object
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                description:
+                  type: string
+                  nullable: true
+              required: [title]
       responses:
         '201':
+          description: Experiment created
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Experiment'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
-  /experiments/{expId}/jspsych:
-    post:
-      summary: Upload jsPsych bundle
+  /experiments/{id}:
+    get:
+      tags: [Experiments]
+      summary: Get a specific experiment by ID
       security:
         - bearerAuth: []
       parameters:
         - in: path
-          name: expId
-          schema: { type: string }
+          name: id
           required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Experiment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Experiment'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Experiment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+    put:
+      tags: [Experiments]
+      summary: Update an experiment
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                  nullable: true
+      responses:
+        '200':
+          description: Experiment updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Experiment'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Experiment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+    delete:
+      tags: [Experiments]
+      summary: Delete an experiment
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Experiment deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Experiment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /experiments/{id}/status:
+    patch:
+      tags: [Experiments]
+      summary: Toggle experiment live status
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  live: { type: boolean }
+                  completion_code: { type: string }
+                  public_url: { type: string }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Experiment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /experiments/{id}/upload:
+    post:
+      tags: [Files]
+      summary: Upload experiment files
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
         content:
           multipart/form-data:
             schema:
               type: object
               properties:
-                file:
-                  type: string
-                  format: binary
-      responses:
-        '201':
-          description: Bundle stored
-
-  /experiments/{expId}/participants:
-    get:
-      summary: List participants
-      security: [ bearerAuth: [] ]
-      parameters:
-        - in: path
-          name: expId
-          schema: { type: string }
-          required: true
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
       responses:
         '200':
+          description: Files uploaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  files: 
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        filename: { type: string }
+                        originalName: { type: string }
+                        size: { type: number }
+                        path: { type: string }
+                  experimentId: { type: string, format: uuid }
+
+  /experiments/{id}/files:
+    get:
+      tags: [Files]
+      summary: List uploaded files for an experiment
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of files
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  files:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        filename: { type: string }
+                        size: { type: number }
+                        uploaded: { type: string, format: date-time }
+
+  /experiments/{id}/files/{filename}:
+    delete:
+      tags: [Files]
+      summary: Delete a specific file
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: filename
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+
+  /experiments/{id}/data:
+    get:
+      tags: [Data]
+      summary: Get all data for an experiment
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Experiment data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  experiment_id: { type: string, format: uuid }
+                  experiment_title: { type: string }
+                  total_participants: { type: number }
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ExperimentData'
+
+  /experiments/{id}/data/summary:
+    get:
+      tags: [Data]
+      summary: Get summary statistics for experiment data
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Summary statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  experiment_id: { type: string, format: uuid }
+                  experiment_title: { type: string }
+                  total_participants: { type: number }
+                  participants_with_prolific_id: { type: number }
+                  first_participant: { type: string, format: date-time, nullable: true }
+                  last_participant: { type: string, format: date-time, nullable: true }
+                  synced_to_osf: { type: number }
+                  not_synced: { type: number }
+                  average_completion_time_ms: { type: number }
+                  average_completion_time_minutes: { type: number }
+
+  /experiments/{id}/data/export/json:
+    get:
+      tags: [Data]
+      summary: Export experiment data as JSON
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: JSON data export
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Participant'
+                  type: object
+
+  /experiments/{id}/data/export/csv:
+    get:
+      tags: [Data]
+      summary: Export experiment data as CSV
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: CSV data export
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /experiments/{id}/data/{participantId}:
+    get:
+      tags: [Data]
+      summary: Get data for specific participant
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: participantId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Participant data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentData'
+    
+    delete:
+      tags: [Data]
+      summary: Delete participant data (GDPR compliance)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: participantId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Data deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+
+  /experiments/{id}/datapipe/config:
     post:
-      summary: Add a participant
-      security: [ bearerAuth: [] ]
+      tags: [DataPipe]
+      summary: Configure DataPipe for experiment
+      description: |
+        Configure DataPipe settings for an experiment. You must first create the experiment 
+        at https://pipe.jspsych.org to obtain a DataPipe experiment ID.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AddParticipant'
+              type: object
+              properties:
+                osf_project_id:
+                  type: string
+                  description: OSF project ID (from OSF URL e.g. 'abc123' from osf.io/abc123)
+                osf_data_component_id:
+                  type: string
+                  description: OSF data component ID (optional, defaults to project ID)
+                datapipe_experiment_id:
+                  type: string
+                  description: DataPipe experiment ID (obtained from pipe.jspsych.org)
+              required: [osf_project_id, osf_data_component_id, datapipe_experiment_id]
       responses:
         '200':
-          description: Added
+          description: DataPipe configured
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  experiment_id: { type: string, format: uuid }
+                  osf_project_id: { type: string }
+                  osf_data_component_id: { type: string }
+                  datapipe_experiment_id: { type: string }
+                  osf_project_url: { type: string }
+
+  /experiments/{id}/datapipe/sync:
+    post:
+      tags: [DataPipe]
+      summary: Sync experiment data to OSF via DataPipe
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Sync completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  results:
+                    type: object
+                    properties:
+                      success: 
+                        type: array
+                        items: { type: string }
+                      failed:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            participant_id: { type: string }
+                            error: { type: string }
+                      total: { type: number }
+                  osf_project_url: { type: string }
+
+  /experiments/{id}/datapipe/status:
+    get:
+      tags: [DataPipe]
+      summary: Get DataPipe sync status for experiment
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Sync status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  experiment_id: { type: string, format: uuid }
+                  datapipe_configured: { type: boolean }
+                  datapipe_experiment_id: { type: string, nullable: true }
+                  osf_project_id: { type: string, nullable: true }
+                  osf_data_component_id: { type: string, nullable: true }
+                  total_data_points: { type: number }
+                  synced_data_points: { type: number }
+                  unsynced_data_points: { type: number }
+                  last_sync: { type: string, format: date-time, nullable: true }
+                  osf_project_url: { type: string, nullable: true }
+
+  /run/{id}:
+    get:
+      tags: [Public]
+      summary: Run experiment (public endpoint for participants)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: PROLIFIC_PID
+          schema:
+            type: string
+          description: Prolific participant ID
+      responses:
+        '200':
+          description: Experiment runner HTML page
+          content:
+            text/html:
+              schema:
+                type: string
+        '403':
+          description: Experiment not live
+        '404':
+          description: Experiment not found
+
+  /run/{id}/data:
+    post:
+      tags: [Public]
+      summary: Submit experiment data (public endpoint)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                session_id:
+                  type: string
+                prolific_pid:
+                  type: string
+                  nullable: true
+                data:
+                  type: object
+              required: [session_id, data]
+      responses:
+        '200':
+          description: Data saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  id: { type: string, format: uuid }
+                  message: { type: string }
+
+  /run/{id}/complete:
+    get:
+      tags: [Public]
+      summary: Experiment completion page (public endpoint)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Completion page HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /dashboard/overview:
+    get:
+      tags: [Dashboard]
+      summary: Get dashboard overview statistics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Dashboard overview data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statistics:
+                    type: object
+                    properties:
+                      experiments:
+                        type: object
+                        properties:
+                          total: { type: number }
+                          live: { type: number }
+                          with_data: { type: number }
+                      participants:
+                        type: object
+                        properties:
+                          total: { type: number }
+                          this_week: { type: number }
+                      data_sync:
+                        type: object
+                        properties:
+                          synced: { type: number }
+                          pending: { type: number }
+                  recent_activity:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        title: { type: string }
+                        live: { type: boolean }
+                        created_at: { type: string, format: date-time }
+                        participant_count: { type: number }
+
+  /dashboard/experiments:
+    get:
+      tags: [Dashboard]
+      summary: Get detailed experiment statistics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Detailed experiment statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: number }
+                  experiments:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        title: { type: string }
+                        live: { type: boolean }
+                        created_at: { type: string, format: date-time }
+                        statistics:
+                          type: object
+                          properties:
+                            total_participants: { type: number }
+                            synced_participants: { type: number }
+                            pending_sync: { type: number }
+                            last_participant: { type: string, format: date-time, nullable: true }
+                        configuration:
+                          type: object
+                          properties:
+                            has_files: { type: boolean }
+                            has_prolific: { type: boolean }
+                            has_datapipe: { type: boolean }
+
+  /dashboard/activity:
+    get:
+      tags: [Dashboard]
+      summary: Get activity timeline
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: days
+          schema:
+            type: integer
+            default: 30
+          description: Number of days to look back
+      responses:
+        '200':
+          description: Activity timeline data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  time_range:
+                    type: object
+                    properties:
+                      start: { type: string, format: date-time }
+                      end: { type: string, format: date-time }
+                      days: { type: number }
+                  daily_participants:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string, format: date }
+                        count: { type: number }
+                  daily_experiments:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string, format: date }
+                        count: { type: number }
+
+  /dashboard/storage:
+    get:
+      tags: [Dashboard]
+      summary: Get storage usage statistics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Storage usage statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_storage:
+                    type: object
+                    properties:
+                      bytes: { type: number }
+                      mb: { type: string }
+                      gb: { type: string }
+                  total_files: { type: number }
+                  experiments:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        experiment_id: { type: string, format: uuid }
+                        experiment_title: { type: string }
+                        size_bytes: { type: number }
+                        size_mb: { type: string }
+                        file_count: { type: number }
 
 components:
   securitySchemes:
@@ -136,41 +977,130 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: JWT token obtained from /auth/login endpoint
 
   schemas:
     UserProfile:
       type: object
       properties:
-        id:       { type: string }
-        email:    { type: string }
-        name:     { type: string }
-        organizationId: { type: string, nullable: true }
-        priority: { type: boolean }
-    UserProfileUpdate:
-      type: object
-      properties:
-        name:     { type: string }
-        organizationId: { type: string }
-    NewExperiment:
-      type: object
-      properties:
-        title:     { type: string }
-        description:{ type: string }
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        created_at:
+          type: string
+          format: date-time
+    
     Experiment:
-      allOf:
-        - $ref: '#/components/schemas/NewExperiment'
-        - type: object
-          properties:
-            id:       { type: string }
-            status:   { type: string, enum: [draft, live, ended] }
-            createdAt:{ type: string, format: date-time }
-    Participant:
       type: object
       properties:
-        id:           { type: string }
-        prolificPid:  { type: string }
-    AddParticipant:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        live:
+          type: boolean
+          default: false
+        experiment_files_path:
+          type: string
+          nullable: true
+        prolific_study_id:
+          type: string
+          nullable: true
+        prolific_status:
+          type: string
+          enum: [draft, published, completed]
+          default: draft
+        completion_code:
+          type: string
+          nullable: true
+        datapipe_project_id:
+          type: string
+          nullable: true
+        datapipe_component_id:
+          type: string
+          nullable: true
+        datapipe_experiment_id:
+          type: string
+          nullable: true
+        auto_delete_days:
+          type: integer
+          default: 30
+        user_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    
+    ExperimentData:
       type: object
       properties:
-        prolificPid:  { type: string }
-      required: [prolificPid]
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+        prolific_pid:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        synced_to_osf:
+          type: boolean
+        data:
+          type: object
+          description: jsPsych experiment data
+    
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+    
+    ValidationError:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              msg:
+                type: string
+              path:
+                type: string
+              location:
+                type: string
+
+tags:
+  - name: Authentication
+    description: User authentication endpoints
+  - name: Profile
+    description: User profile management
+  - name: Experiments
+    description: Experiment management
+  - name: Files
+    description: Experiment file management
+  - name: Data
+    description: Experiment data collection and export
+  - name: DataPipe
+    description: DataPipe integration for OSF sync
+  - name: Public
+    description: Public endpoints for experiment participants
+  - name: Health
+    description: Health check endpoints
+  - name: Dashboard
+    description: Dashboard and analytics endpoints

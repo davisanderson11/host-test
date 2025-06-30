@@ -20,6 +20,38 @@ const Experiment = sequelize.define('Experiment', {
   live: {
     type: DataTypes.BOOLEAN,
     defaultValue: false
+  },
+  experiment_files_path: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  prolific_study_id: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  prolific_status: {
+    type: DataTypes.ENUM('draft', 'published', 'completed'),
+    defaultValue: 'draft'
+  },
+  completion_code: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  datapipe_project_id: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  datapipe_component_id: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  datapipe_experiment_id: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  auto_delete_days: {
+    type: DataTypes.INTEGER,
+    defaultValue: 30
   }
 }, {
   tableName: 'experiments',

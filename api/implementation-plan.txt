@@ -1,0 +1,138 @@
+EXPERIMENT HOSTING PLATFORM - IMPLEMENTATION PLAN
+================================================
+
+WORKFLOW OVERVIEW
+-----------------
+1. Experimenter uploads jsPsych experiment files
+2. Experiment gets hosted on the server
+3. Experiment automatically posts to Prolific
+4. Participants join via Prolific
+5. Data gets sent to OSF via pipe.jspsych.org
+6. Data gets deleted from server after transfer
+
+REQUIRED API ENDPOINTS
+----------------------
+
+1. EXPERIMENT FILE UPLOAD & HOSTING
+   POST   /experiments/:id/upload          // Upload jsPsych experiment files
+   GET    /experiments/:id/files           // List uploaded files
+   DELETE /experiments/:id/files/:filename // Delete specific file
+   GET    /run/:id                         // Public page to run experiment
+   GET    /run/:id/assets/*               // Serve experiment assets
+
+2. PROLIFIC INTEGRATION
+   POST   /experiments/:id/prolific/config // Configure Prolific settings
+   POST   /experiments/:id/prolific/publish // Publish to Prolific
+   GET    /experiments/:id/prolific/status // Check study status
+   POST   /prolific/webhook               // Handle Prolific webhooks
+
+3. PARTICIPANT FLOW
+   GET    /run/:id/start                  // Start page with Prolific ID capture
+   POST   /run/:id/data                   // Collect jsPsych data
+   GET    /run/:id/complete               // Completion page with code
+
+4. DATAPIPE INTEGRATION
+   POST   /experiments/:id/datapipe/config // Configure OSF credentials
+   POST   /experiments/:id/datapipe/sync  // Trigger data sync to OSF
+   GET    /experiments/:id/datapipe/status // Check sync status
+
+5. DATA MANAGEMENT
+   GET    /experiments/:id/data/download  // Download before deletion
+   DELETE /experiments/:id/data/purge     // Manual data deletion
+   POST   /experiments/:id/data/auto-delete // Configure auto-deletion
+
+DATABASE SCHEMA UPDATES
+-----------------------
+
+1. UPDATE EXPERIMENT MODEL
+   - prolific_study_id: STRING
+   - prolific_status: ENUM('draft', 'published', 'completed')
+   - completion_code: STRING
+   - datapipe_project_id: STRING
+   - datapipe_component_id: STRING
+   - auto_delete_days: INTEGER
+   - experiment_files_path: STRING
+
+2. ADD EXPERIMENTDATA MODEL
+   - id: UUID
+   - experiment_id: UUID (FK)
+   - prolific_pid: STRING
+   - session_id: STRING
+   - data: JSONB
+   - synced_to_osf: BOOLEAN
+   - synced_at: TIMESTAMP
+   - created_at: TIMESTAMP
+
+3. ADD PROLIFICCONFIG MODEL
+   - id: UUID
+   - experiment_id: UUID (FK)
+   - title: STRING
+   - description: TEXT
+   - reward: INTEGER (in pence/cents)
+   - total_places: INTEGER
+   - estimated_completion_time: INTEGER (minutes)
+   - prolific_api_token: STRING (encrypted)
+   - created_at: TIMESTAMP
+
+ENVIRONMENT VARIABLES
+---------------------
+PROLIFIC_API_URL=https://api.prolific.co
+DATAPIPE_API_URL=https://pipe.jspsych.org/api
+UPLOAD_DIR=./uploads
+PUBLIC_URL=http://localhost:3000
+
+IMPLEMENTATION ORDER
+--------------------
+Phase 1: File Upload System
+- Install multer for file uploads
+- Create upload endpoints
+- Implement file storage structure
+- Add static file serving
+
+Phase 2: Public Experiment Runner
+- Create public routes (no auth)
+- Build experiment runner HTML template
+- Implement data collection endpoint
+- Add session management
+
+Phase 3: Prolific Integration
+- Add Prolific configuration endpoints
+- Implement API integration
+- Handle participant redirects
+- Generate completion codes
+
+Phase 4: DataPipe Integration
+- Implement OSF sync via DataPipe API
+- Add sync status tracking
+- Create auto-deletion logic
+
+Phase 5: Data Management
+- Add data export functionality
+- Implement data purging
+- Create cleanup schedules
+
+TECHNICAL REQUIREMENTS
+----------------------
+NPM Packages to Install:
+- multer (file uploads)
+- axios (API calls)
+- node-cron (scheduled tasks)
+- crypto (encryption)
+
+Security Considerations:
+- Validate file types (HTML, JS, CSS, images only)
+- Sanitize filenames
+- Encrypt API tokens
+- Rate limit public endpoints
+- CORS configuration for experiment runner
+
+File Structure:
+/uploads/
+  /experiments/
+    /{experiment-id}/
+      /index.html
+      /experiment.js
+      /assets/
+        /images/
+        /sounds/
+        /videos/
