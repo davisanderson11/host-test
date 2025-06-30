@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const jwt = require('jsonwebtoken');
 const { upload, UPLOAD_DIR } = require('../config/upload');
-const Experiment = require('../models/Experiment');
+const Experiment = require('../models/experiment');
 
 // Auth middleware
 const auth = (req, res, next) => {
