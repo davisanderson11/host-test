@@ -21,11 +21,12 @@ const auth = (req, res, next) => {
   }
 };
 
-// POST /experiments/:id/datapipe/config - Configure DataPipe for experiment and create on DataPipe
+// POST /experiments/:id/datapipe/config - Configure DataPipe for experiment
 router.post('/:id/datapipe/config',
   auth,
   body('osf_project_id').isString().notEmpty().withMessage('OSF project ID is required'),
   body('osf_data_component_id').isString().notEmpty().withMessage('OSF data component ID is required'),
+  body('datapipe_experiment_id').isString().notEmpty().withMessage('DataPipe experiment ID is required'),
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -41,46 +42,21 @@ router.post('/:id/datapipe/config',
         return res.status(404).json({ error: 'Experiment not found' });
       }
 
-      // Update OSF IDs
+      // Update OSF IDs and DataPipe experiment ID
       await experiment.update({
         datapipe_project_id: req.body.osf_project_id,
-        datapipe_component_id: req.body.osf_data_component_id
+        datapipe_component_id: req.body.osf_data_component_id,
+        datapipe_experiment_id: req.body.datapipe_experiment_id
       });
 
-      // Create experiment on DataPipe if not already created
-      if (!experiment.datapipe_experiment_id) {
-        try {
-          const datapipeResponse = await datapipeService.createExperiment({}, experiment);
-          
-          // Store the DataPipe experiment ID (handle different response formats)
-          const datapipeId = datapipeResponse.experimentId || datapipeResponse.experiment_id || datapipeResponse.id;
-          await experiment.update({
-            datapipe_experiment_id: datapipeId
-          });
-
-          res.json({
-            message: 'DataPipe configured and experiment created',
-            experiment_id: experiment.id,
-            osf_project_id: experiment.datapipe_project_id,
-            osf_data_component_id: experiment.datapipe_component_id,
-            datapipe_experiment_id: datapipeId,
-            osf_project_url: `https://osf.io/${experiment.datapipe_project_id}/`
-          });
-        } catch (error) {
-          res.status(500).json({ 
-            error: `Failed to create experiment on DataPipe: ${error.message}` 
-          });
-        }
-      } else {
-        res.json({
-          message: 'DataPipe already configured',
-          experiment_id: experiment.id,
-          osf_project_id: experiment.datapipe_project_id,
-          osf_data_component_id: experiment.datapipe_component_id,
-          datapipe_experiment_id: experiment.datapipe_experiment_id,
-          osf_project_url: `https://osf.io/${experiment.datapipe_project_id}/`
-        });
-      }
+      res.json({
+        message: 'DataPipe configured successfully',
+        experiment_id: experiment.id,
+        osf_project_id: experiment.datapipe_project_id,
+        osf_data_component_id: experiment.datapipe_component_id,
+        datapipe_experiment_id: experiment.datapipe_experiment_id,
+        osf_project_url: `https://osf.io/${experiment.datapipe_project_id}/`
+      });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

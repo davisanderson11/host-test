@@ -4,34 +4,19 @@ const axios = require('axios');
 class DataPipeService {
   constructor() {
     // DataPipe API v2 endpoint
-    this.baseURL = process.env.DATAPIPE_API_URL || 'https://pipe.jspsych.org/api/v2';
+    this.baseURL = process.env.DATAPIPE_API_URL || 'https://pipe.jspsych.org/api';
   }
 
   /**
-   * Create experiment on DataPipe
-   * DataPipe creates an experiment ID and links it to OSF project/component
+   * NOTE: DataPipe does not support creating experiments via API.
+   * Experiments must be created manually at https://pipe.jspsych.org
+   * This method is kept for future use if the API adds this functionality.
    */
   async createExperiment(datapipeCredentials, experimentData) {
-    try {
-      const response = await axios.post(
-        `${this.baseURL}/experiment`,
-        {
-          experimentName: experimentData.title,
-          osiFrameworkNodeId: experimentData.datapipe_project_id,
-          dataComponentId: experimentData.datapipe_component_id || experimentData.datapipe_project_id
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      console.log('DataPipe create experiment response:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error('DataPipe create experiment error:', error.response?.data || error.message);
-      throw new Error(`Failed to create experiment on DataPipe: ${error.response?.data?.message || error.message}`);
-    }
+    throw new Error(
+      'DataPipe experiments must be created manually at https://pipe.jspsych.org. ' +
+      'After creating the experiment, use the DataPipe experiment ID to configure this experiment.'
+    );
   }
 
   /**
@@ -39,10 +24,14 @@ class DataPipeService {
    */
   async sendData(datapipeExperimentId, sessionId, data) {
     try {
-      // DataPipe expects data in a specific format
+      // DataPipe expects data as a text string with experimentID and filename
       const response = await axios.post(
-        `${this.baseURL}/data/${datapipeExperimentId}/${sessionId}`,
-        data, // Send the jsPsych data directly
+        `${this.baseURL}/data`,
+        {
+          experimentID: datapipeExperimentId,
+          filename: `${sessionId}.json`,
+          data: JSON.stringify(data) // Convert to string as required by API
+        },
         {
           headers: {
             'Content-Type': 'application/json'
@@ -66,16 +55,12 @@ class DataPipeService {
       total: experimentData.length
     };
 
-    // First, ensure experiment exists on DataPipe
+    // Ensure experiment has DataPipe ID configured
     if (!experiment.datapipe_experiment_id) {
-      try {
-        const datapipeResponse = await this.createExperiment({}, experiment);
-        // Store the DataPipe experiment ID
-        experiment.datapipe_experiment_id = datapipeResponse.experimentId;
-        await experiment.save();
-      } catch (error) {
-        throw new Error(`Failed to create experiment on DataPipe: ${error.message}`);
-      }
+      throw new Error(
+        'DataPipe experiment ID not configured. Please create the experiment at https://pipe.jspsych.org ' +
+        'and configure it using the /datapipe/config endpoint with the DataPipe experiment ID.'
+      );
     }
 
     // Send each participant's data
@@ -111,12 +96,15 @@ class DataPipeService {
   }
 
   /**
-   * Get experiment info from DataPipe
+   * Get condition assignment from DataPipe
    */
-  async getExperiment(datapipeExperimentId) {
+  async getCondition(datapipeExperimentId) {
     try {
-      const response = await axios.get(
-        `${this.baseURL}/experiment/${datapipeExperimentId}`,
+      const response = await axios.post(
+        `${this.baseURL}/condition`,
+        {
+          experimentID: datapipeExperimentId
+        },
         {
           headers: {
             'Content-Type': 'application/json'
@@ -125,8 +113,8 @@ class DataPipeService {
       );
       return response.data;
     } catch (error) {
-      console.error('DataPipe get experiment error:', error.response?.data || error.message);
-      throw new Error(`Failed to get experiment from DataPipe: ${error.response?.data?.message || error.message}`);
+      console.error('DataPipe get condition error:', error.response?.data || error.message);
+      throw new Error(`Failed to get condition from DataPipe: ${error.response?.data?.message || error.message}`);
     }
   }
 }

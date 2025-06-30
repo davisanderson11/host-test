@@ -616,6 +616,9 @@ paths:
     post:
       tags: [DataPipe]
       summary: Configure DataPipe for experiment
+      description: |
+        Configure DataPipe settings for an experiment. You must first create the experiment 
+        at https://pipe.jspsych.org to obtain a DataPipe experiment ID.
       security:
         - bearerAuth: []
       parameters:
@@ -634,11 +637,14 @@ paths:
               properties:
                 osf_project_id:
                   type: string
-                  description: OSF project ID
+                  description: OSF project ID (from OSF URL e.g. 'abc123' from osf.io/abc123)
                 osf_data_component_id:
                   type: string
-                  description: OSF data component ID
-              required: [osf_project_id, osf_data_component_id]
+                  description: OSF data component ID (optional, defaults to project ID)
+                datapipe_experiment_id:
+                  type: string
+                  description: DataPipe experiment ID (obtained from pipe.jspsych.org)
+              required: [osf_project_id, osf_data_component_id, datapipe_experiment_id]
       responses:
         '200':
           description: DataPipe configured
