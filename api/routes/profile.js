@@ -40,7 +40,7 @@ router.get('/', auth, async (req, res) => {
 // Helper function to validate Prolific API token
 const validateProlificToken = async (token) => {
   try {
-    const response = await fetch('https://api.prolific.co/api/v1/users/me/', {
+    const response = await fetch('https://api.prolific.com/api/v1/users/me/', {
       headers: {
         'Authorization': `Token ${token}`,
         'Content-Type': 'application/json'
