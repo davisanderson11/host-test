@@ -12,6 +12,7 @@ const publicRouter = require('./routes/public');
 const dataRouter = require('./routes/data');
 const datapipeRouter = require('./routes/datapipe');
 const dashboardRouter = require('./routes/dashboard');
+const dataDeletionRouter = require('./routes/dataDeletion');
 
 const app = express();
 app.use(cors());
@@ -35,6 +36,9 @@ app.use('/profile', profileRouter);
 app.use('/experiments', experimentsRouter);
 // File uploads
 app.use('/experiments', uploadRouter);
+// Data deletion - must come before data routes to avoid conflicts
+app.use('/experiments', dataDeletionRouter);
+app.use('/data', dataDeletionRouter);
 // Data management
 app.use('/experiments', dataRouter);
 // DataPipe integration

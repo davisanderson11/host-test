@@ -289,12 +289,35 @@ router.get('/storage', auth, async (req, res) => {
         totalSize += size;
         totalFiles += fileCount;
         
+        // Separate data folder stats
+        const dataPath = path.join(expPath, 'data');
+        let dataSize = 0;
+        let dataFileCount = 0;
+        
+        try {
+          const dataStats = await getDirectorySize(dataPath);
+          dataSize = dataStats.size;
+          dataFileCount = dataStats.fileCount;
+        } catch (e) {
+          // Data folder might not exist
+        }
+        
         experimentStorage.push({
           experiment_id: exp.id,
           experiment_title: exp.title,
-          size_bytes: size,
-          size_mb: (size / (1024 * 1024)).toFixed(2),
-          file_count: fileCount
+          total_size_bytes: size,
+          total_size_mb: (size / (1024 * 1024)).toFixed(2),
+          total_file_count: fileCount,
+          experiment_files: {
+            size_bytes: size - dataSize,
+            size_mb: ((size - dataSize) / (1024 * 1024)).toFixed(2),
+            file_count: fileCount - dataFileCount
+          },
+          data_files: {
+            size_bytes: dataSize,
+            size_mb: (dataSize / (1024 * 1024)).toFixed(2),
+            file_count: dataFileCount
+          }
         });
       } catch (error) {
         // Directory might not exist
@@ -302,14 +325,59 @@ router.get('/storage', auth, async (req, res) => {
       }
     }
 
+    // Get database storage for experiment data
+    const dataStorageQuery = await ExperimentData.findAll({
+      attributes: [
+        'experiment_id',
+        [ExperimentData.sequelize.fn('COUNT', ExperimentData.sequelize.col('ExperimentData.id')), 'data_count'],
+        [ExperimentData.sequelize.fn('SUM', ExperimentData.sequelize.fn('LENGTH', ExperimentData.sequelize.cast(ExperimentData.sequelize.col('ExperimentData.data'), 'text'))), 'data_size']
+      ],
+      include: [{
+        model: Experiment,
+        where: { user_id: req.user.id },
+        attributes: ['title']
+      }],
+      group: ['ExperimentData.experiment_id', 'Experiment.id', 'Experiment.title'],
+      raw: true
+    });
+
+    // Calculate total database storage
+    let totalDbSize = 0;
+    const dbStorage = dataStorageQuery.map(row => {
+      const size = parseInt(row.data_size) || 0;
+      totalDbSize += size;
+      return {
+        experiment_id: row.experiment_id,
+        experiment_title: row['Experiment.title'],
+        data_count: parseInt(row.data_count),
+        db_size_bytes: size,
+        db_size_mb: (size / (1024 * 1024)).toFixed(2)
+      };
+    });
+
     res.json({
-      total_storage: {
+      file_storage: {
         bytes: totalSize,
         mb: (totalSize / (1024 * 1024)).toFixed(2),
-        gb: (totalSize / (1024 * 1024 * 1024)).toFixed(2)
+        gb: (totalSize / (1024 * 1024 * 1024)).toFixed(2),
+        file_count: totalFiles
       },
-      total_files: totalFiles,
-      experiments: experimentStorage
+      database_storage: {
+        bytes: totalDbSize,
+        mb: (totalDbSize / (1024 * 1024)).toFixed(2),
+        data_points: dbStorage.reduce((sum, exp) => sum + exp.data_count, 0)
+      },
+      total_storage: {
+        bytes: totalSize + totalDbSize,
+        mb: ((totalSize + totalDbSize) / (1024 * 1024)).toFixed(2),
+        gb: ((totalSize + totalDbSize) / (1024 * 1024 * 1024)).toFixed(2)
+      },
+      experiments: experimentStorage,
+      database_data: dbStorage,
+      data_location: {
+        files: process.env.UPLOAD_DIR || './uploads',
+        database: 'PostgreSQL database (experiment_data table)'
+      }
     });
   } catch (error) {
     console.error('Dashboard storage error:', error);

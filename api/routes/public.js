@@ -370,13 +370,32 @@ router.post('/run/:id/data', express.json(), async (req, res) => {
       }
     }
 
-    // Save the data
+    // Save the data to database
     const experimentData = await ExperimentData.create({
       experiment_id: experiment.id,
       session_id,
       prolific_pid,
       data: parsedData
     });
+
+    // Also save to file system in data folder
+    const dataDir = path.join(__dirname, '..', process.env.UPLOAD_DIR || './uploads', 'experiments', experiment.id, 'data');
+    
+    // Create data directory if it doesn't exist
+    try {
+      await fs.mkdir(dataDir, { recursive: true });
+      
+      // Save data file with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `${session_id}_${timestamp}.json`;
+      const filepath = path.join(dataDir, filename);
+      
+      await fs.writeFile(filepath, JSON.stringify(parsedData, null, 2));
+      console.log(`Data saved to file: ${filepath}`);
+    } catch (fileError) {
+      console.error('Error saving data file:', fileError);
+      // Continue even if file save fails - database save is primary
+    }
 
     console.log(`Data saved for experiment ${experiment.id}, session ${session_id}`);
 
