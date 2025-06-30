@@ -23,7 +23,7 @@ app.get('/ping', async (_, res) => {
 
 // Auth
 app.use('/auth', authRouter);
-// Profile
+// Profile - includes Prolific account linking
 app.use('/profile', profileRouter);
 // Experiments
 app.use('/experiments', experimentsRouter);
