@@ -8,20 +8,19 @@ class DataPipeService {
 
   /**
    * Create experiment on DataPipe
+   * DataPipe creates an experiment ID and links it to OSF project/component
    */
-  async createExperiment(osfToken, experimentData) {
+  async createExperiment(datapipeCredentials, experimentData) {
     try {
       const response = await axios.post(
-        `${this.baseURL}/experiments`,
+        `${this.baseURL}/experiment`,
         {
-          experiment_id: experimentData.id,
-          experiment_name: experimentData.title,
-          osf_project_id: experimentData.datapipe_project_id,
-          osf_component_id: experimentData.datapipe_component_id
+          experimentName: experimentData.title,
+          osiFrameworkNodeId: experimentData.datapipe_project_id,
+          dataComponentId: experimentData.datapipe_component_id || experimentData.datapipe_project_id
         },
         {
           headers: {
-            'Authorization': `Bearer ${osfToken}`,
             'Content-Type': 'application/json'
           }
         }
@@ -34,19 +33,16 @@ class DataPipeService {
   }
 
   /**
-   * Send data to DataPipe
+   * Send data to DataPipe using the DataPipe experiment ID
    */
-  async sendData(osfToken, experimentId, data) {
+  async sendData(datapipeExperimentId, sessionId, data) {
     try {
+      // DataPipe expects data in a specific format
       const response = await axios.post(
-        `${this.baseURL}/data`,
-        {
-          experiment_id: experimentId,
-          data: data
-        },
+        `${this.baseURL}/data/${datapipeExperimentId}/${sessionId}`,
+        data, // Send the jsPsych data directly
         {
           headers: {
-            'Authorization': `Bearer ${osfToken}`,
             'Content-Type': 'application/json'
           }
         }
@@ -61,7 +57,7 @@ class DataPipeService {
   /**
    * Sync all unsync'd data for an experiment
    */
-  async syncExperimentData(osfToken, experiment, experimentData) {
+  async syncExperimentData(experiment, experimentData) {
     const results = {
       success: [],
       failed: [],
@@ -71,8 +67,9 @@ class DataPipeService {
     // First, ensure experiment exists on DataPipe
     if (!experiment.datapipe_experiment_id) {
       try {
-        const datapipeExp = await this.createExperiment(osfToken, experiment);
-        experiment.datapipe_experiment_id = datapipeExp.id;
+        const datapipeResponse = await this.createExperiment({}, experiment);
+        // Store the DataPipe experiment ID
+        experiment.datapipe_experiment_id = datapipeResponse.experimentId;
         await experiment.save();
       } catch (error) {
         throw new Error(`Failed to create experiment on DataPipe: ${error.message}`);
@@ -86,16 +83,12 @@ class DataPipeService {
       }
 
       try {
-        // Format data for DataPipe
-        const formattedData = {
-          session_id: participant.session_id,
-          prolific_pid: participant.prolific_pid,
-          participant_id: participant.id,
-          data: participant.data,
-          created_at: participant.created_at
-        };
-
-        await this.sendData(osfToken, experiment.id, formattedData);
+        // Send to DataPipe using the DataPipe experiment ID
+        await this.sendData(
+          experiment.datapipe_experiment_id,
+          participant.session_id,
+          participant.data
+        );
         
         // Mark as synced
         participant.synced_to_osf = true;
@@ -116,27 +109,22 @@ class DataPipeService {
   }
 
   /**
-   * Validate OSF token
+   * Get experiment info from DataPipe
    */
-  async validateToken(osfToken) {
+  async getExperiment(datapipeExperimentId) {
     try {
       const response = await axios.get(
-        'https://api.osf.io/v2/users/me/',
+        `${this.baseURL}/experiment/${datapipeExperimentId}`,
         {
           headers: {
-            'Authorization': `Bearer ${osfToken}`
+            'Content-Type': 'application/json'
           }
         }
       );
-      return {
-        valid: true,
-        user: response.data.data.attributes.full_name
-      };
+      return response.data;
     } catch (error) {
-      return {
-        valid: false,
-        error: error.response?.data?.errors?.[0]?.detail || 'Invalid token'
-      };
+      console.error('DataPipe get experiment error:', error.response?.data || error.message);
+      throw new Error(`Failed to get experiment from DataPipe: ${error.response?.data?.message || error.message}`);
     }
   }
 }

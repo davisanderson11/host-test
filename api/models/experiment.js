@@ -45,6 +45,10 @@ const Experiment = sequelize.define('Experiment', {
     type: DataTypes.STRING,
     allowNull: true
   },
+  datapipe_experiment_id: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
   auto_delete_days: {
     type: DataTypes.INTEGER,
     defaultValue: 30

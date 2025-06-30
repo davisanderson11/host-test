@@ -17,16 +17,12 @@ const DatapipeConfig = sequelize.define('DatapipeConfig', {
       key: 'id'
     }
   },
-  osf_token: {
+  datapipe_api_key: {
     type: DataTypes.TEXT,
-    allowNull: false
-  },
-  default_project_id: {
-    type: DataTypes.STRING,
     allowNull: true
   },
-  default_component_id: {
-    type: DataTypes.STRING,
+  datapipe_secret: {
+    type: DataTypes.TEXT,
     allowNull: true
   },
   auto_sync: {
