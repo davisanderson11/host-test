@@ -100,4 +100,34 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
+// Toggle experiment live status
+router.patch('/:id/status', auth, async (req, res) => {
+  try {
+    const experiment = await Experiment.findOne({
+      where: { id: req.params.id, user_id: req.user.id }
+    });
+    if (!experiment) return res.status(404).json({ error: 'Experiment not found' });
+    
+    // Generate completion code if going live for the first time
+    if (!experiment.live && !experiment.completion_code) {
+      const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+      await experiment.update({ 
+        live: true, 
+        completion_code: code 
+      });
+    } else {
+      await experiment.update({ live: !experiment.live });
+    }
+    
+    res.json({ 
+      id: experiment.id,
+      live: experiment.live,
+      completion_code: experiment.completion_code,
+      public_url: `${process.env.PUBLIC_URL}/run/${experiment.id}`
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

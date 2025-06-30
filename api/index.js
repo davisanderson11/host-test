@@ -8,6 +8,7 @@ const authRouter = require('./routes/auth');
 const profileRouter = require('./routes/profile');
 const experimentsRouter = require('./routes/experiments');
 const uploadRouter = require('./routes/upload');
+const publicRouter = require('./routes/public');
 
 const app = express();
 app.use(cors());
@@ -31,6 +32,9 @@ app.use('/profile', profileRouter);
 app.use('/experiments', experimentsRouter);
 // File uploads
 app.use('/experiments', uploadRouter);
+
+// Public routes (no auth required)
+app.use('/', publicRouter);
 
 // Serve uploaded files (for public experiment access)
 app.use('/run/:id/assets', (req, res, next) => {
