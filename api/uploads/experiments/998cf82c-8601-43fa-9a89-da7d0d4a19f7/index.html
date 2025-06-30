@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Columbia Card Task</title>
+    <script src="https://unpkg.com/jspsych@8.2.1"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@2.1.0"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-instructions@2.1.0"></script>
+    <style>
+        /* Aggressive override of jsPsych default styles */
+        .jspsych-display-element {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            min-height: 100vh !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+        }
+        
+        .jspsych-content-wrapper {
+            width: 100% !important;
+            max-width: none !important;
+            height: 100vh !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            padding: 10px !important;
+            box-sizing: border-box !important;
+            margin: 0 !important;
+        }
+        
+        .jspsych-content {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        
+        /* Remove any default margins on all jsPsych elements */
+        [class*="jspsych-"] {
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+        }
+        
+        /* Base styles */
+        body { 
+            font-family: Arial, sans-serif; 
+            background-color: #f0f0f0; 
+            margin: 0; 
+            padding: 0;
+            overflow-x: hidden;
+        }
+        
+        /* Card grid responsive design */
+        .card-grid { 
+            display: grid; 
+            gap: clamp(5px, 1.5vw, 12px);
+            width: 90vw;
+            max-width: 700px;
+            margin: 10px auto;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        /* Card responsive sizing */
+        .card { 
+            width: 100%;
+            aspect-ratio: 2/3;
+            min-height: 60px;
+            height: clamp(80px, 15vw, 130px);
+            border: 2px solid #333; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: clamp(16px, 4vw, 26px);
+            font-weight: bold; 
+            transition: all 0.3s ease;
+            box-sizing: border-box;
+        }
+        
+        .card-back { 
+            background: linear-gradient(45deg, #4169E1, #6495ED); 
+            color: white; 
+        }
+        
+        .card-back:hover { 
+            background: linear-gradient(45deg, #1E3A8A, #3B82F6); 
+            transform: scale(1.05); 
+        }
+        
+        .card-gain { 
+            background: linear-gradient(45deg, #22C55E, #16A34A); 
+            color: white; 
+        }
+        
+        .card-loss { 
+            background: linear-gradient(45deg, #EF4444, #DC2626); 
+            color: white; 
+        }
+        
+        /* Game info responsive */
+        .game-info { 
+            text-align: center; 
+            margin: clamp(5px, 1.5vh, 15px) 0;
+            font-size: clamp(14px, 3vw, 18px);
+            width: 100%;
+        }
+        
+        .game-info h3 {
+            margin: 5px 0;
+            font-size: clamp(18px, 4vw, 24px);
+        }
+        
+        /* Round info responsive */
+        .round-info { 
+            background: white; 
+            padding: clamp(10px, 2.5vw, 20px);
+            border-radius: 8px; 
+            margin: 5px auto; 
+            width: 85vw;
+            max-width: 500px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            font-size: clamp(14px, 3vw, 18px);
+        }
+        
+        .round-info h2 {
+            font-size: clamp(18px, 4vw, 26px);
+            margin: 5px 0;
+        }
+        
+        .round-info p {
+            margin: 8px 0;
+        }
+        
+        /* Button container */
+        .button-container { 
+            text-align: center; 
+            margin: clamp(15px, 2vh, 25px) 0;
+            width: 100%;
+        }
+        
+        /* Stop button responsive */
+        .stop-button { 
+            background-color: #EF4444; 
+            color: white; 
+            border: none; 
+            padding: clamp(10px, 2vw, 15px) clamp(20px, 3vw, 30px);
+            font-size: clamp(14px, 2vw, 18px);
+            border-radius: 6px; 
+            cursor: pointer; 
+            margin: 10px;
+            transition: all 0.2s ease;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        .stop-button:hover { 
+            background-color: #DC2626; 
+            transform: scale(1.05);
+        }
+        
+        .stop-button:active {
+            transform: scale(0.98);
+        }
+        
+        /* Score display */
+        .score-display { 
+            font-size: clamp(20px, 3vw, 28px);
+            font-weight: bold; 
+            color: #1E3A8A; 
+        }
+        
+        /* Message area */
+        #message {
+            font-size: clamp(16px, 2.5vw, 20px);
+            margin: 10px 0;
+            min-height: 30px;
+        }
+        
+        /* Instructions pages */
+        .jspsych-instructions-nav {
+            margin-top: 20px !important;
+        }
+        
+        .jspsych-btn {
+            padding: 10px 20px !important;
+            font-size: clamp(14px, 2vw, 16px) !important;
+            margin: 0 10px !important;
+            background-color: #4169E1 !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 6px !important;
+            cursor: pointer !important;
+            transition: all 0.2s ease !important;
+        }
+        
+        .jspsych-btn:hover {
+            background-color: #1E3A8A !important;
+            transform: scale(1.05) !important;
+        }
+        
+        /* Responsive grid columns */
+        @media (max-width: 600px) {
+            .card-grid {
+                grid-template-columns: repeat(3, 1fr) !important;
+                gap: 8px;
+            }
+            
+            .card {
+                height: clamp(70px, 20vw, 100px);
+                font-size: clamp(14px, 4vw, 20px);
+            }
+        }
+        
+        @media (max-width: 400px) {
+            .card-grid {
+                grid-template-columns: repeat(2, 1fr) !important;
+                width: 95vw;
+            }
+            
+            .card {
+                height: clamp(90px, 35vw, 120px);
+            }
+        }
+        
+        @media (min-width: 768px) {
+            .card {
+                height: clamp(100px, 12vw, 130px);
+            }
+        }
+        
+        /* Viewport meta tag enforcement */
+        @viewport {
+            width: device-width;
+            initial-scale: 1;
+            maximum-scale: 1;
+            user-scalable: no;
+        }
+        
+        /* Ensure clickable areas are large enough for mobile */
+        @media (hover: none) and (pointer: coarse) {
+            .card, .stop-button, .jspsych-btn {
+                min-height: 44px;
+                min-width: 44px;
+            }
+        }
+        
+        /* Prevent zoom on mobile */
+        @media (max-width: 768px) {
+            html {
+                touch-action: manipulation;
+            }
+        }
+    </style>
+</head>
+<body>
+<script>
+    
+// CONFIGURATION - EDIT THESE VALUES
+const CONFIG = {
+    numCards: 16,        // num of cards in the grid (4-36)
+    gridCols: 4,         // num of cols in the grid (2-8)
+    rounds: [            // round configurations
+        { lossCards: 1, gainAmount: 10, lossAmount: 250 },
+        { lossCards: 1, gainAmount: 10, lossAmount: 250 },
+        { lossCards: 1, gainAmount: 10, lossAmount: 250 },
+        { lossCards: 1, gainAmount: 10, lossAmount: 250 },
+        { lossCards: 1, gainAmount: 10, lossAmount: 250 },
+        { lossCards: 1, gainAmount: 10, lossAmount: 250 },
+        { lossCards: 1, gainAmount: 10, lossAmount: 250 },
+        { lossCards: 1, gainAmount: 10, lossAmount: 250 }
+    ]
+};
+
+// Global state
+let state = {
+    totalScore: 0,
+    roundData: null,
+    roundsCompleted: 0
+};
+
+// Initialize jsPsych
+const jsPsych = initJsPsych({
+    on_finish: function() {
+        jsPsych.data.displayData();
+        jsPsych.data.get().localSave('csv','columbia_card_task_data.csv');
+    }
+});
+
+// Set grid CSS
+document.documentElement.style.setProperty('--grid-cols', CONFIG.gridCols);
+const style = document.createElement('style');
+style.textContent = `.card-grid { grid-template-columns: repeat(${CONFIG.gridCols}, 1fr) !important; }`;
+document.head.appendChild(style);
+
+// Helper functions
+function setupRound(cfg, roundNum) {
+    // Create card layout
+    const lossPositions = [];
+    while (lossPositions.length < cfg.lossCards) {
+        const pos = Math.floor(Math.random() * CONFIG.numCards);
+        if (!lossPositions.includes(pos)) lossPositions.push(pos);
+    }
+    
+    state.roundData = {
+        score: 0,
+        cards: 0,
+        ended: false,
+        startTime: Date.now(),
+        selections: []
+    };
+    
+    // Card click handlers
+    document.querySelectorAll('.card').forEach((card, i) => {
+        card.addEventListener('click', function() {
+            if (state.roundData.ended || !this.classList.contains('card-back')) return;
+            
+            state.roundData.cards++;
+            state.roundData.selections.push({card: i, time: Date.now() - state.roundData.startTime});
+            
+            if (lossPositions.includes(i)) {
+                this.className = 'card card-loss';
+                this.textContent = `-${cfg.lossAmount}`;
+                state.roundData.score -= cfg.lossAmount;
+                state.roundData.ended = true;
+                document.getElementById('message').innerHTML = '<b style="color:#EF4444">Loss card! Round ended.</b>';
+                setTimeout(() => endRound(cfg, roundNum, false), 2000);
+            } else {
+                this.className = 'card card-gain';
+                this.textContent = `+${cfg.gainAmount}`;
+                state.roundData.score += cfg.gainAmount;
+                document.getElementById('round-score').textContent = state.roundData.score;
+                
+                if (state.roundData.cards === CONFIG.numCards - cfg.lossCards) {
+                    state.roundData.ended = true;
+                    document.getElementById('message').innerHTML = '<b style="color:#22C55E">All gain cards found!</b>';
+                    setTimeout(() => endRound(cfg, roundNum, true), 2000);
+                }
+            }
+        });
+    });
+    
+    // Stop button
+    document.getElementById('stop-btn').addEventListener('click', function() {
+        if (!state.roundData.ended) {
+            state.roundData.ended = true;
+            document.getElementById('message').innerHTML = '<b style="color:#1E3A8A">Round stopped!</b>';
+            setTimeout(() => endRound(cfg, roundNum, true), 1500);
+        }
+    });
+}
+
+function endRound(cfg, roundNum, voluntary) {
+    state.totalScore += state.roundData.score;
+    state.roundsCompleted++;
+    
+    jsPsych.getCurrentTrial().data = {
+        task: 'round_complete',
+        round: roundNum,
+        ...cfg,
+        cards_selected: state.roundData.cards,
+        round_score: state.roundData.score,
+        total_score: state.totalScore,
+        voluntary_stop: voluntary,
+        selections: state.roundData.selections,
+        rt: Date.now() - state.roundData.startTime
+    };
+    
+    jsPsych.finishTrial();
+}
+
+// Build timeline
+const timeline = [];
+
+// Instructions
+timeline.push({
+    type: jsPsychInstructions,
+    pages: [
+        `<h1>Columbia Card Task</h1>
+        <p>Select cards to earn points. Most cards give you points, but some lose points and end the round.</p>
+        <p>You can stop anytime to keep your points, or keep selecting for more.</p>`,
+        `<h2>Strategy</h2>
+        <p>Before each round, you'll see:</p>
+        <ul><li>Number of loss cards</li><li>Points per gain card</li><li>Loss penalty</li></ul>
+        <p>Use this info to decide your risk!</p>`
+    ],
+    show_clickable_nav: true
+});
+
+// Add rounds
+CONFIG.rounds.forEach((roundConfig, idx) => {
+    const roundNum = idx + 1;
+    
+    // Round info
+    timeline.push({
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: `<div class="round-info">
+            <h2>Round ${roundNum} of ${CONFIG.rounds.length}</h2>
+            <p>Loss cards: <b style="color:#EF4444">${roundConfig.lossCards}</b></p>
+            <p>Loss penalty: <b style="color:#EF4444">-${roundConfig.lossAmount}</b></p>
+            <p>Gain per card: <b style="color:#22C55E">+${roundConfig.gainAmount}</b></p>
+            <p>Total score: <span class="score-display">${state.totalScore}</span></p>
+            <p>Press SPACE to start</p>
+        </div>`,
+        choices: [' ']
+    });
+    
+    // Card game
+    timeline.push({
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: function() {
+            const cards = Array.from({length: CONFIG.numCards}, (_, i) => 
+                `<div class="card card-back" id="card-${i}">?</div>`
+            ).join('');
+            
+            return `<div class="game-info">
+                <h3>Round ${roundNum}</h3>
+                <p>Score: <span id="round-score">0</span> | Total: ${state.totalScore}</p>
+            </div>
+            <div class="card-grid">
+                ${cards}
+            </div>
+            <div class="button-container">
+                <button class="stop-button" id="stop-btn">Stop and Keep Points</button>
+            </div>
+            <div id="message"></div>`;
+        },
+        choices: "NO_KEYS",
+        on_load: function() {
+            setupRound(roundConfig, roundNum);
+        }
+    });
+});
+
+// Results
+timeline.push({
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: function() {
+        const data = jsPsych.data.get().filter({task: 'round_complete'});
+        const avgCards = data.count() > 0 ? data.select('cards_selected').mean() : 0;
+        
+        let finalScore = 0;
+        if (data.count() > 0) {
+            const scores = data.select('total_score').values;
+            finalScore = scores[scores.length - 1];
+        }
+        
+        return `<div class="round-info">
+            <h2>Task Complete!</h2>
+            <p>Final Score: <span class="score-display">${finalScore}</span></p>
+            <p>Average cards selected: ${avgCards.toFixed(1)}</p>
+            <p>Press SPACE to see data</p>
+        </div>`;
+    },
+    choices: [' ']
+});
+
+// Run experiment
+jsPsych.run(timeline);
+</script>
+</body>
+</html>
