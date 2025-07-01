@@ -62,14 +62,12 @@ router.get('/run/:id', async (req, res) => {
                 saveDataToServer(data);
                 
                 // Replace the page content with a success message
-                document.body.innerHTML = `
-                  <div style="font-family: Arial, sans-serif; padding: 40px; text-align: center;">
-                    <h1>Experiment Complete!</h1>
-                    <p>Your data has been saved successfully.</p>
-                    <p>Completion Code: <strong style="font-size: 24px; background: #f0f0f0; padding: 10px; border-radius: 5px;">${completionCode}</strong></p>
-                    ${prolificPid ? '<p><a href="https://app.prolific.co/submissions/complete?cc=' + completionCode + '">Return to Prolific</a></p>' : ''}
-                  </div>
-                `;
+                document.body.innerHTML = '<div style="font-family: Arial, sans-serif; padding: 40px; text-align: center;">' +
+                  '<h1>Experiment Complete!</h1>' +
+                  '<p>Your data has been saved successfully.</p>' +
+                  '<p>Completion Code: <strong style="font-size: 24px; background: #f0f0f0; padding: 10px; border-radius: 5px;">' + completionCode + '</strong></p>' +
+                  (prolificPid ? '<p><a href="https://app.prolific.co/submissions/complete?cc=' + completionCode + '">Return to Prolific</a></p>' : '') +
+                  '</div>';
                 
                 // Clear the interval since we found the data
                 clearInterval(dataCheckInterval);
