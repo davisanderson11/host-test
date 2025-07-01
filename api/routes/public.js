@@ -67,12 +67,6 @@ router.get('/run/:id', async (req, res) => {
               
               dataSaved = true;
               console.log('Data saved to server successfully');
-              
-              // Redirect to completion page after saving
-              setTimeout(() => {
-                window.location.href = '/run/' + experimentId + '/complete' + (prolificPid ? '?PROLIFIC_PID=' + prolificPid : '');
-              }, 500);
-              
               return await response.json();
             } catch (error) {
               console.error('Error saving data:', error);
@@ -81,42 +75,6 @@ router.get('/run/:id', async (req, res) => {
             }
           }
           
-          // Enhanced interception that runs immediately
-          console.log('Setting up jsPsych interception...');
-          
-          // Override the global localSave immediately (for v6/v7)
-          Object.defineProperty(window, 'localSave', {
-            value: function(filename, data) {
-              console.log('Global localSave intercepted');
-              saveDataToServer(data);
-            },
-            writable: false,
-            configurable: true
-          });
-          
-          // Intercept download attempts
-          const originalCreateElement = document.createElement;
-          document.createElement = function(tagName) {
-            const element = originalCreateElement.call(this, tagName);
-            if (tagName.toLowerCase() === 'a') {
-              const originalClick = element.click;
-              element.click = function() {
-                if (this.download && this.href && this.href.startsWith('blob:')) {
-                  console.log('Download link click intercepted');
-                  // Extract data from blob URL
-                  fetch(this.href)
-                    .then(response => response.text())
-                    .then(data => {
-                      saveDataToServer(data);
-                    })
-                    .catch(err => console.error('Error intercepting download:', err));
-                  return false;
-                }
-                return originalClick.call(this);
-              };
-            }
-            return element;
-          };
           
           // Wait for jsPsych to load
           function interceptJsPsych() {
@@ -124,8 +82,7 @@ router.get('/run/:id', async (req, res) => {
               console.log('jsPsych detected, version:', jsPsych.version);
               
               // For jsPsych v8+ (uses initJsPsych function)
-              if (typeof initJsPsych !== 'undefined' && !window._jsPsychIntercepted) {
-                window._jsPsychIntercepted = true;
+              if (typeof initJsPsych !== 'undefined') {
                 const originalInitJsPsych = window.initJsPsych;
                 window.initJsPsych = function(config) {
                   // Add our on_finish handler
@@ -134,8 +91,7 @@ router.get('/run/:id', async (req, res) => {
                   
                   config.on_finish = function(data) {
                     console.log('Experiment finished, saving data...');
-                    const jsonData = data.json ? data.json() : data;
-                    saveDataToServer(jsonData);
+                    saveDataToServer(data.json());
                     if (originalOnFinish) originalOnFinish(data);
                   };
                   
@@ -144,24 +100,20 @@ router.get('/run/:id', async (req, res) => {
                   
                   // Override the instance's data.localSave
                   if (jsPsychInstance.data) {
-                    const originalLocalSave = jsPsychInstance.data.localSave;
                     jsPsychInstance.data.localSave = function(filename, format) {
-                      console.log('Instance localSave intercepted - saving to server instead');
+                      console.log('localSave intercepted - saving to server');
                       const data = format === 'csv' ? this.get().csv() : this.get().json();
                       saveDataToServer(data);
-                      return; // Prevent default behavior
                     };
                     
                     // Also override get().localSave
                     const originalGet = jsPsychInstance.data.get;
                     jsPsychInstance.data.get = function() {
                       const dataCollection = originalGet.call(this);
-                      const originalCollectionLocalSave = dataCollection.localSave;
                       dataCollection.localSave = function(filename, format) {
                         console.log('DataCollection localSave intercepted');
                         const data = format === 'csv' ? this.csv() : this.json();
                         saveDataToServer(data);
-                        return; // Prevent default behavior
                       };
                       return dataCollection;
                     };
@@ -173,59 +125,42 @@ router.get('/run/:id', async (req, res) => {
               }
               
               // For jsPsych v7
-              else if (jsPsych.version && jsPsych.run && !jsPsych._intercepted) {
-                jsPsych._intercepted = true;
+              else if (jsPsych.version && jsPsych.run) {
+                const originalRun = jsPsych.run;
+                jsPsych.run = function(timeline) {
+                  // Add completion handler to timeline
+                  if (Array.isArray(timeline)) {
+                    timeline.push({
+                      type: jsPsychHtmlKeyboardResponse,
+                      stimulus: 'Saving data...',
+                      choices: "NO_KEYS",
+                      trial_duration: 100,
+                      on_load: function() {
+                        saveDataToServer(jsPsych.data.get().json());
+                      }
+                    });
+                  }
+                  return originalRun.call(this, timeline);
+                };
                 
-                // Override localSave immediately
+                // Override localSave
                 if (jsPsych.data) {
                   jsPsych.data.localSave = function(filename, format) {
-                    console.log('jsPsych v7 localSave intercepted - saving to server');
+                    console.log('localSave intercepted - saving to server');
                     const data = format === 'csv' ? jsPsych.data.get().csv() : jsPsych.data.get().json();
                     saveDataToServer(data);
-                    return; // Prevent default behavior
-                  };
-                  
-                  // Override get().localSave
-                  const originalGet = jsPsych.data.get;
-                  jsPsych.data.get = function() {
-                    const dataCollection = originalGet.call(this);
-                    dataCollection.localSave = function(filename, format) {
-                      console.log('DataCollection localSave intercepted');
-                      const data = format === 'csv' ? this.csv() : this.json();
-                      saveDataToServer(data);
-                      return; // Prevent default behavior
-                    };
-                    return dataCollection;
                   };
                 }
                 console.log('jsPsych v7 interception complete');
               }
               
               // For jsPsych v6 and older
-              else if (jsPsych.init && !jsPsych._intercepted) {
-                jsPsych._intercepted = true;
-                
-                // Override localSave
-                if (jsPsych.data && jsPsych.data.get) {
-                  const originalGet = jsPsych.data.get;
-                  jsPsych.data.get = function() {
-                    const dataCollection = originalGet.call(this);
-                    dataCollection.localSave = function(filename, format) {
-                      console.log('jsPsych v6 localSave intercepted');
-                      const data = format === 'csv' ? this.csv() : this.json();
-                      saveDataToServer(data);
-                      return; // Prevent default behavior
-                    };
-                    return dataCollection;
-                  };
-                }
-                
+              else if (jsPsych.init) {
                 const originalInit = jsPsych.init;
                 jsPsych.init = function(config) {
                   const originalOnFinish = config.on_finish;
                   config.on_finish = function() {
-                    const data = jsPsych.data.get().json();
-                    saveDataToServer(data);
+                    saveDataToServer(jsPsych.data.get().json());
                     if (originalOnFinish) originalOnFinish();
                   };
                   return originalInit.call(this, config);
@@ -233,28 +168,36 @@ router.get('/run/:id', async (req, res) => {
                 console.log('jsPsych v6 interception complete');
               }
               
+              // Override jsPsych.data.get().localSave for all versions
+              if (jsPsych.data && jsPsych.data.get) {
+                const originalGet = jsPsych.data.get;
+                jsPsych.data.get = function() {
+                  const dataCollection = originalGet.call(this);
+                  if (dataCollection.localSave) {
+                    dataCollection.localSave = function(filename, format) {
+                      console.log('DataCollection localSave intercepted');
+                      const data = format === 'csv' ? this.csv() : this.json();
+                      saveDataToServer(data);
+                    };
+                  }
+                  return dataCollection;
+                };
+              }
+              
             } else {
-              // Try again in 50ms
-              setTimeout(interceptJsPsych, 50);
+              // Try again in 100ms
+              setTimeout(interceptJsPsych, 100);
             }
           }
           
-          // Start interception immediately
+          // Start interception
           interceptJsPsych();
           
-          // Try again on various events
+          // Also try on DOMContentLoaded
           document.addEventListener('DOMContentLoaded', interceptJsPsych);
-          window.addEventListener('load', interceptJsPsych);
           
-          // Also check periodically for the first 5 seconds
-          let checkCount = 0;
-          const checkInterval = setInterval(() => {
-            interceptJsPsych();
-            checkCount++;
-            if (checkCount > 20) { // 20 * 250ms = 5 seconds
-              clearInterval(checkInterval);
-            }
-          }, 250);
+          // And on window load
+          window.addEventListener('load', interceptJsPsych);
         })();
       </script>
       `;
