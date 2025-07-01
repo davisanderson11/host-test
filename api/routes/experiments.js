@@ -30,10 +30,14 @@ router.post(
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
     try {
+      // Generate a random completion code
+      const completionCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+      
       const exp = await Experiment.create({
         user_id: req.user.id,
         title: req.body.title,
-        description: req.body.description || null
+        description: req.body.description || null,
+        completion_code: completionCode
       });
       res.status(201).json(exp);
     } catch (err) {

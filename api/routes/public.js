@@ -89,6 +89,16 @@ router.get('/run/:id', async (req, res) => {
               
               dataSaved = true;
               console.log('=== DATA SAVED SUCCESSFULLY ===');
+              
+              // If this is a Prolific participant, redirect to completion
+              if (prolificPid) {
+                console.log('Prolific participant detected, redirecting to completion...');
+                window.location.href = 'https://app.prolific.com/submissions/complete?cc=' + completionCode;
+              } else {
+                // For non-Prolific participants, redirect to completion page
+                window.location.href = '/run/' + experimentId + '/complete';
+              }
+              
               return await response.json();
             } catch (error) {
               console.error('Error saving data:', error);
@@ -120,9 +130,9 @@ router.get('/run/:id', async (req, res) => {
                   const originalOnFinish = config ? config.on_finish : undefined;
                   if (!config) config = {};
                   
-                  config.on_finish = function(data) {
+                  config.on_finish = async function(data) {
                     console.log('Experiment finished, saving data...');
-                    saveDataToServer(data.json());
+                    await saveDataToServer(data.json());
                     if (originalOnFinish) originalOnFinish(data);
                   };
                   
@@ -135,23 +145,23 @@ router.get('/run/:id', async (req, res) => {
                     const originalLocalSave = jsPsychInstance.data.localSave;
                     console.log('Original localSave:', originalLocalSave);
                     
-                    jsPsychInstance.data.localSave = function(filename, format) {
+                    jsPsychInstance.data.localSave = async function(filename, format) {
                       console.log('=== LOCALSAVE INTERCEPTED ===');
                       console.log('Filename:', filename);
                       console.log('Format:', format);
                       const data = format === 'csv' ? this.get().csv() : this.get().json();
                       console.log('Calling saveDataToServer...');
-                      saveDataToServer(data);
+                      await saveDataToServer(data);
                     };
                     
                     // Also override get().localSave
                     const originalGet = jsPsychInstance.data.get;
                     jsPsychInstance.data.get = function() {
                       const dataCollection = originalGet.call(this);
-                      dataCollection.localSave = function(filename, format) {
+                      dataCollection.localSave = async function(filename, format) {
                         console.log('DataCollection localSave intercepted');
                         const data = format === 'csv' ? this.csv() : this.json();
-                        saveDataToServer(data);
+                        await saveDataToServer(data);
                       };
                       return dataCollection;
                     };
@@ -183,10 +193,10 @@ router.get('/run/:id', async (req, res) => {
                 
                 // Override localSave
                 if (jsPsych.data) {
-                  jsPsych.data.localSave = function(filename, format) {
+                  jsPsych.data.localSave = async function(filename, format) {
                     console.log('localSave intercepted - saving to server');
                     const data = format === 'csv' ? jsPsych.data.get().csv() : jsPsych.data.get().json();
-                    saveDataToServer(data);
+                    await saveDataToServer(data);
                   };
                 }
                 console.log('jsPsych v7 interception complete');
@@ -197,8 +207,8 @@ router.get('/run/:id', async (req, res) => {
                 const originalInit = jsPsych.init;
                 jsPsych.init = function(config) {
                   const originalOnFinish = config.on_finish;
-                  config.on_finish = function() {
-                    saveDataToServer(jsPsych.data.get().json());
+                  config.on_finish = async function() {
+                    await saveDataToServer(jsPsych.data.get().json());
                     if (originalOnFinish) originalOnFinish();
                   };
                   return originalInit.call(this, config);
@@ -212,10 +222,10 @@ router.get('/run/:id', async (req, res) => {
                 jsPsych.data.get = function() {
                   const dataCollection = originalGet.call(this);
                   if (dataCollection.localSave) {
-                    dataCollection.localSave = function(filename, format) {
+                    dataCollection.localSave = async function(filename, format) {
                       console.log('DataCollection localSave intercepted');
                       const data = format === 'csv' ? this.csv() : this.json();
-                      saveDataToServer(data);
+                      await saveDataToServer(data);
                     };
                   }
                   return dataCollection;
@@ -334,6 +344,16 @@ function createJsExperimentWrapper(experiment) {
             
             dataSaved = true;
             console.log('Data saved to server successfully');
+            
+            // If this is a Prolific participant, redirect to completion
+            if (prolificPid) {
+              console.log('Prolific participant detected, redirecting to completion...');
+              window.location.href = 'https://app.prolific.com/submissions/complete?cc=' + completionCode;
+            } else {
+              // For non-Prolific participants, redirect to completion page
+              window.location.href = '/run/' + experimentId + '/complete';
+            }
+            
             return await response.json();
           } catch (error) {
             console.error('Error saving data:', error);
@@ -351,19 +371,19 @@ function createJsExperimentWrapper(experiment) {
               const originalOnFinish = config ? config.on_finish : undefined;
               if (!config) config = {};
               
-              config.on_finish = function(data) {
+              config.on_finish = async function(data) {
                 console.log('Experiment finished, saving data...');
-                saveDataToServer(data.json());
+                await saveDataToServer(data.json());
                 if (originalOnFinish) originalOnFinish(data);
               };
               
               const jsPsychInstance = originalInitJsPsych(config);
               
               if (jsPsychInstance.data) {
-                jsPsychInstance.data.localSave = function(filename, format) {
+                jsPsychInstance.data.localSave = async function(filename, format) {
                   console.log('localSave intercepted - saving to server');
                   const data = format === 'csv' ? this.get().csv() : this.get().json();
-                  saveDataToServer(data);
+                  await saveDataToServer(data);
                 };
               }
               
@@ -450,6 +470,7 @@ router.get('/run/:id/complete', async (req, res) => {
     }
 
     const completionCode = experiment.completion_code || 'COMPLETED';
+    const prolificPid = req.query.PROLIFIC_PID || req.query.prolific_pid;
     
     const html = `
 <!DOCTYPE html>
@@ -507,8 +528,8 @@ router.get('/run/:id/complete', async (req, res) => {
         <p>You have completed the experiment. Your completion code is:</p>
         <div class="code" onclick="selectText(this)">${completionCode}</div>
         <p>Click the code to select it, then copy and paste it into Prolific.</p>
-        ${req.query.PROLIFIC_PID ? `
-            <a href="https://app.prolific.co/submissions/complete?cc=${completionCode}" class="button">
+        ${prolificPid ? `
+            <a href="https://app.prolific.com/submissions/complete?cc=${completionCode}" class="button">
                 Return to Prolific
             </a>
         ` : ''}
