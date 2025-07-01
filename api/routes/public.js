@@ -44,6 +44,67 @@ router.get('/run/:id', async (req, res) => {
           const completionCode = "${experiment.completion_code || 'COMPLETED'}";
           let dataSaved = false;
           
+          // Intercept the actual download mechanism that localSave uses
+          const originalCreateElement = document.createElement;
+          document.createElement = function(tagName) {
+            const element = originalCreateElement.call(this, tagName);
+            
+            // If it's an anchor element (used for downloads)
+            if (tagName.toLowerCase() === 'a') {
+              // Store the original click method
+              const originalClick = element.click;
+              
+              // Override the click method
+              element.click = function() {
+                // Check if this is a download link (has download attribute and blob URL)
+                if (this.download && this.href && this.href.startsWith('blob:')) {
+                  console.log('Download intercepted! Saving to server instead...');
+                  
+                  // Fetch the blob data
+                  fetch(this.href)
+                    .then(response => response.text())
+                    .then(data => {
+                      console.log('Extracted data from blob, saving to server...');
+                      saveDataToServer(data);
+                    })
+                    .catch(error => {
+                      console.error('Error extracting blob data:', error);
+                      // Fall back to original click if extraction fails
+                      originalClick.call(this);
+                    });
+                  
+                  // Prevent the download
+                  return false;
+                } else {
+                  // Not a download link, proceed normally
+                  return originalClick.call(this);
+                }
+              };
+            }
+            
+            return element;
+          };
+          
+          // Also intercept URL.createObjectURL to catch blob creation
+          const originalCreateObjectURL = URL.createObjectURL;
+          URL.createObjectURL = function(blob) {
+            console.log('Blob URL creation intercepted');
+            
+            // If it's a blob, read its contents
+            if (blob instanceof Blob) {
+              const reader = new FileReader();
+              reader.onload = function(e) {
+                const content = e.target.result;
+                console.log('Blob content captured, saving to server...');
+                saveDataToServer(content);
+              };
+              reader.readAsText(blob);
+            }
+            
+            // Still create the URL (in case it's needed)
+            return originalCreateObjectURL.call(this, blob);
+          };
+          
           // Data saving function
           async function saveDataToServer(data) {
             if (dataSaved) return;
