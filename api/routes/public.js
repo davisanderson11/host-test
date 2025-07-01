@@ -243,48 +243,6 @@ router.get('/run/:id', async (req, res) => {
             interceptJsPsych();
           });
           
-          // FALLBACK: Monitor DOM for data display
-          console.log('Setting up DOM observer for data display...');
-          
-          function checkForDataInDOM() {
-            const bodyText = document.body.innerText || document.body.textContent || '';
-            
-            // Check if it looks like jsPsych data
-            if (bodyText.trim().startsWith('[') && bodyText.includes('"trial_type"') && bodyText.includes('"trial_index"')) {
-              console.log('=== DATA DISPLAY DETECTED IN DOM ===');
-              try {
-                const data = JSON.parse(bodyText.trim());
-                console.log('Successfully parsed data from DOM');
-                saveDataToServer(data);
-                
-                // Clear the page and show success
-                document.body.innerHTML = '<div style="padding: 50px; text-align: center; font-family: Arial;">' +
-                  '<h1>Experiment Complete!</h1>' +
-                  '<p>Your data has been saved.</p>' +
-                  '<p>Completion Code: <strong>' + completionCode + '</strong></p>' +
-                  '</div>';
-              } catch (e) {
-                console.error('Failed to parse data from DOM:', e);
-              }
-            }
-          }
-          
-          // Check periodically
-          setInterval(checkForDataInDOM, 500);
-          
-          // Also use MutationObserver
-          const observer = new MutationObserver(function(mutations) {
-            checkForDataInDOM();
-          });
-          
-          // Start observing when body is available
-          if (document.body) {
-            observer.observe(document.body, { childList: true, subtree: true });
-          } else {
-            document.addEventListener('DOMContentLoaded', function() {
-              observer.observe(document.body, { childList: true, subtree: true });
-            });
-          }
         })();
       </script>
       `;
@@ -461,7 +419,7 @@ router.post('/run/:id/data', express.json(), async (req, res) => {
       }
     }
 
-    // Save the data to database
+    // Save the data to database only
     const experimentData = await ExperimentData.create({
       experiment_id: experiment.id,
       session_id,
@@ -469,26 +427,7 @@ router.post('/run/:id/data', express.json(), async (req, res) => {
       data: parsedData
     });
 
-    // Also save to file system in data folder
-    const dataDir = path.join(__dirname, '..', process.env.UPLOAD_DIR || './uploads', 'experiments', experiment.id, 'data');
-    
-    // Create data directory if it doesn't exist
-    try {
-      await fs.mkdir(dataDir, { recursive: true });
-      
-      // Save data file with timestamp
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const filename = `${session_id}_${timestamp}.json`;
-      const filepath = path.join(dataDir, filename);
-      
-      await fs.writeFile(filepath, JSON.stringify(parsedData, null, 2));
-      console.log(`Data saved to file: ${filepath}`);
-    } catch (fileError) {
-      console.error('Error saving data file:', fileError);
-      // Continue even if file save fails - database save is primary
-    }
-
-    console.log(`Data saved for experiment ${experiment.id}, session ${session_id}`);
+    console.log(`Data saved to database for experiment ${experiment.id}, session ${session_id}`);
 
     res.json({ 
       success: true, 
