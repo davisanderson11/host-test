@@ -36,7 +36,12 @@ router.get('/run/:id', async (req, res) => {
       // Inject our data collection script at the beginning of head for early execution
       const dataCollectionScript = `
       <script>
-        // Injected by experiment host
+        // Injected by experiment host - DEBUG VERSION
+        console.log('=== INTERCEPTION SCRIPT LOADED ===');
+        console.log('Experiment ID:', "${experiment.id}");
+        console.log('Session ID:', "${sessionId}");
+        console.log('Script injection time:', new Date().toISOString());
+        
         (function() {
           const experimentId = "${experiment.id}";
           const sessionId = "${sessionId}";
@@ -44,11 +49,26 @@ router.get('/run/:id', async (req, res) => {
           const completionCode = "${experiment.completion_code || 'COMPLETED'}";
           let dataSaved = false;
           
+          console.log('Interception function wrapper started');
+          
+          // Monitor what's happening
+          window.addEventListener('error', function(e) {
+            console.error('Window error:', e);
+          });
+          
           // Data saving function
           async function saveDataToServer(data) {
-            if (dataSaved) return;
+            console.log('=== saveDataToServer CALLED ===');
+            console.log('Data type:', typeof data);
+            console.log('Data sample:', JSON.stringify(data).substring(0, 200) + '...');
+            
+            if (dataSaved) {
+              console.log('Data already saved, skipping');
+              return;
+            }
             
             try {
+              console.log('Posting to:', '/run/' + experimentId + '/data');
               const response = await fetch('/run/' + experimentId + '/data', {
                 method: 'POST',
                 headers: {
@@ -61,12 +81,14 @@ router.get('/run/:id', async (req, res) => {
                 })
               });
               
+              console.log('Response status:', response.status);
+              
               if (!response.ok) {
                 throw new Error('Failed to save data');
               }
               
               dataSaved = true;
-              console.log('Data saved to server successfully');
+              console.log('=== DATA SAVED SUCCESSFULLY ===');
               return await response.json();
             } catch (error) {
               console.error('Error saving data:', error);
@@ -75,11 +97,20 @@ router.get('/run/:id', async (req, res) => {
             }
           }
           
+          // Track jsPsych loading
+          let checkCount = 0;
           
           // Wait for jsPsych to load
           function interceptJsPsych() {
+            checkCount++;
+            console.log('Checking for jsPsych... attempt #' + checkCount);
+            
             if (typeof jsPsych !== 'undefined') {
-              console.log('jsPsych detected, version:', jsPsych.version);
+              console.log('=== jsPsych FOUND ===');
+              console.log('jsPsych:', jsPsych);
+              console.log('jsPsych.version:', jsPsych.version);
+              console.log('jsPsych.data:', jsPsych.data);
+              console.log('typeof initJsPsych:', typeof initJsPsych);
               
               // For jsPsych v8+ (uses initJsPsych function)
               if (typeof initJsPsych !== 'undefined') {
@@ -100,9 +131,16 @@ router.get('/run/:id', async (req, res) => {
                   
                   // Override the instance's data.localSave
                   if (jsPsychInstance.data) {
+                    console.log('Overriding jsPsychInstance.data.localSave');
+                    const originalLocalSave = jsPsychInstance.data.localSave;
+                    console.log('Original localSave:', originalLocalSave);
+                    
                     jsPsychInstance.data.localSave = function(filename, format) {
-                      console.log('localSave intercepted - saving to server');
+                      console.log('=== LOCALSAVE INTERCEPTED ===');
+                      console.log('Filename:', filename);
+                      console.log('Format:', format);
                       const data = format === 'csv' ? this.get().csv() : this.get().json();
+                      console.log('Calling saveDataToServer...');
                       saveDataToServer(data);
                     };
                     
@@ -194,10 +232,59 @@ router.get('/run/:id', async (req, res) => {
           interceptJsPsych();
           
           // Also try on DOMContentLoaded
-          document.addEventListener('DOMContentLoaded', interceptJsPsych);
+          document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOMContentLoaded fired');
+            interceptJsPsych();
+          });
           
           // And on window load
-          window.addEventListener('load', interceptJsPsych);
+          window.addEventListener('load', function() {
+            console.log('Window load fired');
+            interceptJsPsych();
+          });
+          
+          // FALLBACK: Monitor DOM for data display
+          console.log('Setting up DOM observer for data display...');
+          
+          function checkForDataInDOM() {
+            const bodyText = document.body.innerText || document.body.textContent || '';
+            
+            // Check if it looks like jsPsych data
+            if (bodyText.trim().startsWith('[') && bodyText.includes('"trial_type"') && bodyText.includes('"trial_index"')) {
+              console.log('=== DATA DISPLAY DETECTED IN DOM ===');
+              try {
+                const data = JSON.parse(bodyText.trim());
+                console.log('Successfully parsed data from DOM');
+                saveDataToServer(data);
+                
+                // Clear the page and show success
+                document.body.innerHTML = '<div style="padding: 50px; text-align: center; font-family: Arial;">' +
+                  '<h1>Experiment Complete!</h1>' +
+                  '<p>Your data has been saved.</p>' +
+                  '<p>Completion Code: <strong>' + completionCode + '</strong></p>' +
+                  '</div>';
+              } catch (e) {
+                console.error('Failed to parse data from DOM:', e);
+              }
+            }
+          }
+          
+          // Check periodically
+          setInterval(checkForDataInDOM, 500);
+          
+          // Also use MutationObserver
+          const observer = new MutationObserver(function(mutations) {
+            checkForDataInDOM();
+          });
+          
+          // Start observing when body is available
+          if (document.body) {
+            observer.observe(document.body, { childList: true, subtree: true });
+          } else {
+            document.addEventListener('DOMContentLoaded', function() {
+              observer.observe(document.body, { childList: true, subtree: true });
+            });
+          }
         })();
       </script>
       `;
