@@ -55,13 +55,14 @@ router.post('/:id/prolific/create',
         return res.status(400).json({ error: 'Prolific account not linked. Please link your Prolific account first.' });
       }
 
-      // Build study URL - needs to include Prolific URL parameters
-      const baseUrl = process.env.PUBLIC_URL && !process.env.PUBLIC_URL.includes('localhost') 
-        ? `${process.env.PUBLIC_URL}/run/${experiment.id}`
-        : 'https://www.jspsych.org';
+      // Build study URL from environment variable
+      const baseUrl = process.env.PUBLIC_URL || 'https://host-test-production.up.railway.app';
+      
+      // Create the experiment URL
+      const experimentUrl = `${baseUrl}/run/${experiment.id}`;
       
       // Prolific requires these URL parameters to be included
-      const studyUrl = `${baseUrl}?PROLIFIC_PID={{%PROLIFIC_PID%}}&STUDY_ID={{%STUDY_ID%}}&SESSION_ID={{%SESSION_ID%}}`;
+      const studyUrl = `${experimentUrl}?PROLIFIC_PID={{%PROLIFIC_PID%}}&STUDY_ID={{%STUDY_ID%}}&SESSION_ID={{%SESSION_ID%}}`;
       
       // Create Prolific study
       const studyData = {
