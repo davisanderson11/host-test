@@ -44,66 +44,53 @@ router.get('/run/:id', async (req, res) => {
           const completionCode = "${experiment.completion_code || 'COMPLETED'}";
           let dataSaved = false;
           
-          // Intercept the actual download mechanism that localSave uses
-          const originalCreateElement = document.createElement;
-          document.createElement = function(tagName) {
-            const element = originalCreateElement.call(this, tagName);
+          // Monitor for when jsPsych displays data on the page
+          function checkForDataDisplay() {
+            // Check if the page content looks like JSON data
+            const bodyText = document.body.innerText || document.body.textContent;
             
-            // If it's an anchor element (used for downloads)
-            if (tagName.toLowerCase() === 'a') {
-              // Store the original click method
-              const originalClick = element.click;
+            // Simple check: starts with [ and contains trial data
+            if (bodyText && bodyText.trim().startsWith('[') && bodyText.includes('"trial_type"')) {
+              console.log('jsPsych data display detected! Capturing data...');
               
-              // Override the click method
-              element.click = function() {
-                // Check if this is a download link (has download attribute and blob URL)
-                if (this.download && this.href && this.href.startsWith('blob:')) {
-                  console.log('Download intercepted! Saving to server instead...');
-                  
-                  // Fetch the blob data
-                  fetch(this.href)
-                    .then(response => response.text())
-                    .then(data => {
-                      console.log('Extracted data from blob, saving to server...');
-                      saveDataToServer(data);
-                    })
-                    .catch(error => {
-                      console.error('Error extracting blob data:', error);
-                      // Fall back to original click if extraction fails
-                      originalClick.call(this);
-                    });
-                  
-                  // Prevent the download
-                  return false;
-                } else {
-                  // Not a download link, proceed normally
-                  return originalClick.call(this);
-                }
-              };
+              try {
+                // Parse the JSON data
+                const data = JSON.parse(bodyText.trim());
+                console.log('Successfully parsed experiment data, saving to server...');
+                
+                // Save to server
+                saveDataToServer(data);
+                
+                // Replace the page content with a success message
+                document.body.innerHTML = `
+                  <div style="font-family: Arial, sans-serif; padding: 40px; text-align: center;">
+                    <h1>Experiment Complete!</h1>
+                    <p>Your data has been saved successfully.</p>
+                    <p>Completion Code: <strong style="font-size: 24px; background: #f0f0f0; padding: 10px; border-radius: 5px;">${completionCode}</strong></p>
+                    ${prolificPid ? '<p><a href="https://app.prolific.co/submissions/complete?cc=' + completionCode + '">Return to Prolific</a></p>' : ''}
+                  </div>
+                `;
+                
+                // Clear the interval since we found the data
+                clearInterval(dataCheckInterval);
+              } catch (e) {
+                // Not valid JSON yet, keep checking
+              }
             }
-            
-            return element;
-          };
+          }
           
-          // Also intercept URL.createObjectURL to catch blob creation
-          const originalCreateObjectURL = URL.createObjectURL;
-          URL.createObjectURL = function(blob) {
-            console.log('Blob URL creation intercepted');
-            
-            // If it's a blob, read its contents
-            if (blob instanceof Blob) {
-              const reader = new FileReader();
-              reader.onload = function(e) {
-                const content = e.target.result;
-                console.log('Blob content captured, saving to server...');
-                saveDataToServer(content);
-              };
-              reader.readAsText(blob);
-            }
-            
-            // Still create the URL (in case it's needed)
-            return originalCreateObjectURL.call(this, blob);
-          };
+          // Check for data display every 500ms
+          let dataCheckInterval = setInterval(checkForDataDisplay, 500);
+          
+          // Also check on DOM changes
+          const observer = new MutationObserver(checkForDataDisplay);
+          observer.observe(document.body, { childList: true, subtree: true });
+          
+          // Stop checking after 5 minutes (experiment should be done by then)
+          setTimeout(() => {
+            clearInterval(dataCheckInterval);
+            observer.disconnect();
+          }, 5 * 60 * 1000);
           
           // Data saving function
           async function saveDataToServer(data) {
